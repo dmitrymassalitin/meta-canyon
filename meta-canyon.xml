@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <default revision="master" sync-j="4"/>
+
+  <remote name="dm"          fetch="https://github.com/dmitrymassalitin"/>
+
+<project name="meta-canyon" path="sources/meta-canyon"  remote="dm"  revision="master" />
+
+</manifest>
