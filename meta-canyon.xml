@@ -20,7 +20,7 @@
 
   <remote name="dm"          fetch="https://github.com/dmitrymassalitin"/>
 
-  <project name="meta-canyon" path="sources/meta-canyon"  remote="dm"  revision="master" />
+  <project name="meta-canyon" path="sources/meta-canyon"  remote="dm"  revision="main" />
 
   <project name="poky"                       path="sources/poky"                       remote="yp"          revision="02eacd385eca7aa9cf25aaaa61427aa9c126e0bc" upstream="scarthgap"/>
   <project name="meta-openembedded"          path="sources/meta-openembedded"          remote="oe"          revision="a72010b414ee3d73888ac9cb4e310e8f05e13aea" upstream="scarthgap"/>
