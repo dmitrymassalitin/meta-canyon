@@ -1,0 +1,2796 @@
+From 385fbe32f031ea4414463075ea398d23c433a5d5 Mon Sep 17 00:00:00 2001
+From: dmitrymassalitin <dmitry.massalitin@gmail.com>
+Date: Sun, 27 Apr 2025 17:33:42 +0000
+Subject: [PATCH] Make copy of the imx8mp_var_dart board to canyon_mx8mp
+
+---
+ arch/arm/dts/canyon-mx8mp-u-boot.dtsi     |   23 +
+ arch/arm/dts/canyon-mx8mp.dts             |  304 ++++++
+ board/canyon/canyon_mx8mp/Kconfig         |   12 +
+ board/canyon/canyon_mx8mp/Makefile        |   18 +
+ board/canyon/canyon_mx8mp/canyon_mx8mp.c  |  504 +++++++++
+ board/canyon/canyon_mx8mp/canyon_mx8mp.h  |   23 +
+ board/canyon/canyon_mx8mp/lpddr4_timing.c | 1124 +++++++++++++++++++++
+ board/canyon/canyon_mx8mp/spl.c           |  290 ++++++
+ configs/canyon_mx8mp_defconfig            |  184 ++++
+ include/configs/canyon_mx8mp.h            |  226 +++++
+ 10 files changed, 2708 insertions(+)
+ create mode 100644 arch/arm/dts/canyon-mx8mp-u-boot.dtsi
+ create mode 100644 arch/arm/dts/canyon-mx8mp.dts
+ create mode 100644 board/canyon/canyon_mx8mp/Kconfig
+ create mode 100644 board/canyon/canyon_mx8mp/Makefile
+ create mode 100644 board/canyon/canyon_mx8mp/canyon_mx8mp.c
+ create mode 100644 board/canyon/canyon_mx8mp/canyon_mx8mp.h
+ create mode 100644 board/canyon/canyon_mx8mp/lpddr4_timing.c
+ create mode 100644 board/canyon/canyon_mx8mp/spl.c
+ create mode 100644 configs/canyon_mx8mp_defconfig
+ create mode 100644 include/configs/canyon_mx8mp.h
+
+diff --git a/arch/arm/dts/canyon-mx8mp-u-boot.dtsi b/arch/arm/dts/canyon-mx8mp-u-boot.dtsi
+new file mode 100644
+index 00000000000..74399c16c4c
+--- /dev/null
++++ b/arch/arm/dts/canyon-mx8mp-u-boot.dtsi
+@@ -0,0 +1,23 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright 2019 NXP
++ * Copyright 2020-2024 Variscite Ltd.
++ */
++
++#include "imx8mp-var-common-u-boot.dtsi"
++
++&pinctrl_uart2 {
++	bootph-pre-ram;
++};
++
++&uart2 {
++	bootph-pre-ram;
++};
++
++&pinctrl_reg_usdhc2_vqmmc {
++	bootph-pre-ram;
++};
++
++&reg_usdhc2_vqmmc {
++	bootph-pre-ram;
++};
+diff --git a/arch/arm/dts/canyon-mx8mp.dts b/arch/arm/dts/canyon-mx8mp.dts
+new file mode 100644
+index 00000000000..668004cbddb
+--- /dev/null
++++ b/arch/arm/dts/canyon-mx8mp.dts
+@@ -0,0 +1,304 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * Copyright 2019 NXP
++ * Copyright 2020-2024 Variscite Ltd.
++ */
++
++#include "imx8mp-var-som.dtsi"
++
++/ {
++	model = "Variscite VAR-SOM-MX8M-PLUS on Symphony-Board";
++
++	chosen {
++		stdout-path = &uart2;
++	};
++
++	aliases {
++		gpio5 = &pca9534;
++	};
++
++	memory@40000000 {
++		device_type = "memory";
++		reg = <0x0 0x40000000 0 0xc0000000>,
++		      <0x1 0x00000000 0 0xc0000000>;
++	};
++
++	reg_usdhc2_vmmc: regulator-usdhc2-vmmc {
++		compatible = "regulator-fixed";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pinctrl_reg_usdhc2_vmmc>;
++		regulator-name = "VSD_3V3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		gpio = <&gpio4 22 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		startup-delay-us = <100>;
++		off-on-delay-us = <12000>;
++	};
++
++	reg_usdhc2_vqmmc: regulator-usdhc2-vqmmc {
++		compatible = "regulator-gpio";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pinctrl_reg_usdhc2_vqmmc>;
++		regulator-name = "VSD_VSEL";
++		regulator-min-microvolt = <1800000>;
++		regulator-max-microvolt = <3300000>;
++		gpios = <&gpio2 12 GPIO_ACTIVE_HIGH>;
++		states = <3300000 0
++			  1800000 1>;
++	};
++};
++
++&uart2 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_uart2>;
++	status = "okay";
++};
++
++&i2c3 {
++	clock-frequency = <100000>;
++	pinctrl-names = "default", "gpio";
++	pinctrl-0 = <&pinctrl_i2c3>;
++	pinctrl-1 = <&pinctrl_i2c3_gpio>;
++	scl-gpios = <&gpio5 18 GPIO_ACTIVE_HIGH>;
++	sda-gpios = <&gpio5 19 GPIO_ACTIVE_HIGH>;
++	status = "okay";
++
++	/* GPIO expander */
++	pca9534: gpio@20 {
++		status = "okay";
++		compatible = "nxp,pca9534";
++		reg = <0x20>;
++		gpio-controller;
++		#gpio-cells = <2>;
++
++		usb3_sel_hog {
++			gpio-hog;
++			gpio-hog-optional;
++			gpios = <4 0>;
++			output-low;
++			line-name = "usb3_sel";
++		};
++
++		eth1_phy_vsel_hog {
++			gpio-hog;
++			gpio-hog-optional;
++			gpios = <6 0>;
++			output-high;
++			line-name = "eth1_phy_vsel";
++		};
++
++		eth1_phy_pwr_hog {
++			gpio-hog;
++			gpio-hog-optional;
++			gpios = <7 0>;
++			output-high;
++			line-name = "eth1_phy_pwr";
++		};
++	};
++
++	ptn5150: ptn5150@3d {
++		compatible = "nxp,ptn5150";
++		pinctrl-names = "default";
++		reg = <0x3d>;
++		i2c-bus = <0x2>;
++		status = "okay";
++	};
++};
++
++&i2c4 {
++	clock-frequency = <100000>;
++	pinctrl-names = "default", "gpio";
++	pinctrl-0 = <&pinctrl_i2c4>;
++	pinctrl-1 = <&pinctrl_i2c4_gpio>;
++	scl-gpios = <&gpio5 20 GPIO_ACTIVE_HIGH>;
++	sda-gpios = <&gpio5 21 GPIO_ACTIVE_HIGH>;
++	status = "okay";
++};
++
++&usb3_phy0 {
++	fsl,phy-tx-vref-tune = <0xe>;
++	fsl,phy-tx-preemp-amp-tune = <3>;
++	fsl,phy-tx-vboost-level = <5>;
++	fsl,phy-comp-dis-tune = <7>;
++	fsl,pcs-tx-deemph-3p5db = <0x21>;
++	fsl,phy-pcs-tx-swing-full = <0x7f>;
++	status = "okay";
++};
++
++&usb3_0 {
++	status = "okay";
++};
++
++&usb_dwc3_0 {
++	dr_mode = "otg";
++	extcon = <&ptn5150>;
++	hnp-disable;
++	srp-disable;
++	adp-disable;
++	usb-role-switch;
++	role-switch-default-mode = "none";
++	status = "okay";
++};
++
++&usb3_phy1 {
++	fsl,phy-tx-preemp-amp-tune = <3>;
++	fsl,phy-tx-vref-tune = <0xb>;
++	status = "okay";
++};
++
++&usb3_1 {
++	status = "okay";
++};
++
++&usb_dwc3_1 {
++	dr_mode = "host";
++	status = "okay";
++};
++
++&usdhc2 {
++	pinctrl-names = "default", "state_100mhz", "state_200mhz";
++	pinctrl-0 = <&pinctrl_usdhc2>, <&pinctrl_usdhc2_gpio>;
++	pinctrl-1 = <&pinctrl_usdhc2_100mhz>, <&pinctrl_usdhc2_gpio>;
++	pinctrl-2 = <&pinctrl_usdhc2_200mhz>, <&pinctrl_usdhc2_gpio>;
++	cd-gpios = <&gpio1 14 GPIO_ACTIVE_LOW>;
++	vmmc-supply = <&reg_usdhc2_vmmc>;
++	vqmmc-supply = <&reg_usdhc2_vqmmc>;
++	bus-width = <4>;
++	no-1-8-v;
++	status = "okay";
++};
++
++&eqos {
++	mdio {
++		ethphy1: ethernet-phy@5 {
++			compatible = "ethernet-phy-ieee802.3-c22";
++			reg = <5>;
++			at803x,eee-disabled;
++			eee-broken-1000t;
++			reset-gpios = <&pca9534 5 GPIO_ACTIVE_LOW>;
++			reset-assert-us = <10000>;
++			reset-deassert-us = <20000>;
++			vddio-supply = <&vddio1>;
++
++			vddio1: vddio-regulator {
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++			};
++		};
++	};
++};
++
++&fec {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_fec>;
++	phy-mode = "rgmii";
++	phy-handle = <&ethphy1>;
++	status = "okay";
++};
++
++&iomuxc {
++
++	pinctrl_uart2: uart2grp {
++		fsl,pins = <
++			MX8MP_IOMUXC_UART2_RXD__UART2_DCE_RX				0x40
++			MX8MP_IOMUXC_UART2_TXD__UART2_DCE_TX				0x40
++		>;
++	};
++
++	pinctrl_i2c3: i2c3grp {
++		fsl,pins = <
++			MX8MP_IOMUXC_I2C3_SCL__I2C3_SCL					0x400001c2
++			MX8MP_IOMUXC_I2C3_SDA__I2C3_SDA					0x400001c2
++		>;
++	};
++
++	pinctrl_i2c4: i2c4grp {
++		fsl,pins = <
++			MX8MP_IOMUXC_I2C4_SCL__I2C4_SCL					0x400001c2
++			MX8MP_IOMUXC_I2C4_SDA__I2C4_SDA					0x400001c2
++		>;
++	};
++
++	pinctrl_i2c3_gpio: i2c3-gpiogrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_I2C3_SCL__GPIO5_IO18				0x1c2
++			MX8MP_IOMUXC_I2C3_SDA__GPIO5_IO19				0x1c2
++		>;
++	};
++
++	pinctrl_i2c4_gpio: i2c4-gpiogrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_I2C4_SCL__GPIO5_IO20				0x1c2
++			MX8MP_IOMUXC_I2C4_SDA__GPIO5_IO21				0x1c2
++		>;
++	};
++
++	pinctrl_reg_usdhc2_vmmc: usdhc2-vmmcreggrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SAI2_RXC__GPIO4_IO22				0x10
++		>;
++	};
++
++	pinctrl_reg_usdhc2_vqmmc: usdhc2-vqmmcreggrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SD2_CD_B__GPIO2_IO12				0xc0
++		>;
++	};
++
++	pinctrl_usdhc2: usdhc2grp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SD2_CLK__USDHC2_CLK				0x190
++			MX8MP_IOMUXC_SD2_CMD__USDHC2_CMD				0x1d0
++			MX8MP_IOMUXC_SD2_DATA0__USDHC2_DATA0				0x1d0
++			MX8MP_IOMUXC_SD2_DATA1__USDHC2_DATA1				0x1d0
++			MX8MP_IOMUXC_SD2_DATA2__USDHC2_DATA2				0x1d0
++			MX8MP_IOMUXC_SD2_DATA3__USDHC2_DATA3				0x1d0
++		>;
++	};
++
++	pinctrl_usdhc2_100mhz: usdhc2-100mhzgrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SD2_CLK__USDHC2_CLK				0x194
++			MX8MP_IOMUXC_SD2_CMD__USDHC2_CMD				0x1d4
++			MX8MP_IOMUXC_SD2_DATA0__USDHC2_DATA0				0x1d4
++			MX8MP_IOMUXC_SD2_DATA1__USDHC2_DATA1				0x1d4
++			MX8MP_IOMUXC_SD2_DATA2__USDHC2_DATA2				0x1d4
++			MX8MP_IOMUXC_SD2_DATA3__USDHC2_DATA3				0x1d4
++		>;
++	};
++
++	pinctrl_usdhc2_200mhz: usdhc2-200mhzgrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SD2_CLK__USDHC2_CLK				0x196
++			MX8MP_IOMUXC_SD2_CMD__USDHC2_CMD				0x1d6
++			MX8MP_IOMUXC_SD2_DATA0__USDHC2_DATA0				0x1d6
++			MX8MP_IOMUXC_SD2_DATA1__USDHC2_DATA1				0x1d6
++			MX8MP_IOMUXC_SD2_DATA2__USDHC2_DATA2				0x1d6
++			MX8MP_IOMUXC_SD2_DATA3__USDHC2_DATA3				0x1d6
++		>;
++	};
++
++	pinctrl_usdhc2_gpio: usdhc2-gpiogrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_GPIO1_IO14__GPIO1_IO14				0x1c4
++		>;
++	};
++
++	pinctrl_fec: fecgrp {
++		fsl,pins = <
++			MX8MP_IOMUXC_SAI1_RXD4__ENET1_RGMII_RD0				0x90
++			MX8MP_IOMUXC_SAI1_RXD5__ENET1_RGMII_RD1				0x90
++			MX8MP_IOMUXC_SAI1_RXD6__ENET1_RGMII_RD2				0x90
++			MX8MP_IOMUXC_SAI1_RXD7__ENET1_RGMII_RD3				0x90
++			MX8MP_IOMUXC_SAI1_TXC__ENET1_RGMII_RXC				0x90
++			MX8MP_IOMUXC_SAI1_TXFS__ENET1_RGMII_RX_CTL			0x90
++			MX8MP_IOMUXC_SAI1_TXD0__ENET1_RGMII_TD0				0x16
++			MX8MP_IOMUXC_SAI1_TXD1__ENET1_RGMII_TD1				0x16
++			MX8MP_IOMUXC_SAI1_TXD2__ENET1_RGMII_TD2				0x16
++			MX8MP_IOMUXC_SAI1_TXD3__ENET1_RGMII_TD3				0x16
++			MX8MP_IOMUXC_SAI1_TXD4__ENET1_RGMII_TX_CTL			0x16
++			MX8MP_IOMUXC_SAI1_TXD5__ENET1_RGMII_TXC				0x16
++		>;
++	};
++};
+diff --git a/board/canyon/canyon_mx8mp/Kconfig b/board/canyon/canyon_mx8mp/Kconfig
+new file mode 100644
+index 00000000000..9d443a73088
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/Kconfig
+@@ -0,0 +1,12 @@
++if TARGET_CANYON_MX8MP
++
++config SYS_BOARD
++	default "canyon_mx8mp"
++
++config SYS_VENDOR
++	default "canyon"
++
++config SYS_CONFIG_NAME
++	default "canyon_mx8mp"
++
++endif
+diff --git a/board/canyon/canyon_mx8mp/Makefile b/board/canyon/canyon_mx8mp/Makefile
+new file mode 100644
+index 00000000000..f67681ff3c0
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/Makefile
+@@ -0,0 +1,18 @@
++#
++# Copyright 2019 NXP
++# Copyright 2020-2024 Variscite Ltd.
++#
++# SPDX-License-Identifier:      GPL-2.0+
++#
++
++obj-y += imx8mp_var_dart.o ../../variscite/common/imx8_eeprom.o
++
++ifdef CONFIG_SPL_BUILD
++obj-y += spl.o
++obj-$(CONFIG_IMX8M_LPDDR4) += lpddr4_timing.o
++else
++obj-y += ../../common/mmc.o
++obj-$(CONFIG_FEC_MXC) += ../../common/eth.o
++obj-$(CONFIG_EXTCON_PTN5150) += ../../variscite/common/extcon-ptn5150.o
++obj-$(CONFIG_IMX8M_BOARD_INIT_DRAM) += ../../variscite/common/imx8_dram.o
++endif
+diff --git a/board/canyon/canyon_mx8mp/canyon_mx8mp.c b/board/canyon/canyon_mx8mp/canyon_mx8mp.c
+new file mode 100644
+index 00000000000..233eb6a14cd
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/canyon_mx8mp.c
+@@ -0,0 +1,504 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Copyright 2019 NXP
++ * Copyright 2020-2024 Variscite Ltd.
++ */
++
++#include <efi_loader.h>
++#include <errno.h>
++#include <fdtdec.h>
++#include <miiphy.h>
++#include <netdev.h>
++#include <asm/io.h>
++#include <asm/mach-imx/iomux-v3.h>
++#include <asm-generic/gpio.h>
++#include <asm/arch/imx8mp_pins.h>
++#include <asm/arch/sys_proto.h>
++#include <asm/mach-imx/gpio.h>
++#include <asm/mach-imx/mxc_i2c.h>
++#include <asm/arch/clock.h>
++#include <spl.h>
++#include <asm/mach-imx/dma.h>
++#include <power/pmic.h>
++#include <usb.h>
++#include <dwc3-uboot.h>
++#include <power/regulator.h>
++#include <linux/delay.h>
++#include <mmc.h>
++
++#include "../../variscite/common/extcon-ptn5150.h"
++#include "../../variscite/common/imx8_eeprom.h"
++#include "canyon_mx8mp.h"
++
++int var_setup_mac(struct var_eeprom *eeprom);
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#define WDOG_PAD_CTRL	(PAD_CTL_DSE6 | PAD_CTL_ODE | PAD_CTL_PUE | PAD_CTL_PE)
++#define GPIO_PAD_CTRL	(PAD_CTL_DSE1 | PAD_CTL_PUE | PAD_CTL_PE  | PAD_CTL_HYS)
++
++static iomux_v3_cfg_t const wdog_pads[] = {
++	MX8MP_PAD_GPIO1_IO02__WDOG1_WDOG_B  | MUX_PAD_CTRL(WDOG_PAD_CTRL),
++};
++
++#ifdef CONFIG_SPL_BUILD
++
++#define BOARD_DETECT_GPIO IMX_GPIO_NR(2, 11)
++#define SOM_WIFI_EN_GPIO IMX_GPIO_NR(2, 19)
++
++static iomux_v3_cfg_t const board_detect_pads[] = {
++	MX8MP_PAD_SD1_STROBE__GPIO2_IO11 | MUX_PAD_CTRL(GPIO_PAD_CTRL),
++	MX8MP_PAD_SD2_RESET_B__GPIO2_IO19 | MUX_PAD_CTRL(GPIO_PAD_CTRL),
++};
++#endif
++
++int var_detect_board_id(void)
++{
++	static int board_id = BOARD_ID_UNDEF;
++
++	if (board_id != BOARD_ID_UNDEF)
++		return board_id;
++
++#ifdef CONFIG_SPL_BUILD
++	imx_iomux_v3_setup_multiple_pads(board_detect_pads,
++				ARRAY_SIZE(board_detect_pads));
++	/*
++	 * For VAR-SOM-MX8M-PLUS 2.x, the IW612 will pull BOARD_DETECT_GPIO
++	 * low when the module is powered down (PDn is asserted low).
++	 * To avoid this, assert PDn high so BOARD_DETECT_GPIO can be read.
++	 */
++	gpio_request(SOM_WIFI_EN_GPIO, "wifi_en");
++	gpio_direction_output(SOM_WIFI_EN_GPIO, 1);
++	udelay(10);
++
++	gpio_request(BOARD_DETECT_GPIO, "board_detect");
++	gpio_direction_input(BOARD_DETECT_GPIO);
++	board_id = gpio_get_value(BOARD_DETECT_GPIO) ? BOARD_ID_SOM : BOARD_ID_DART;
++
++	if (board_id == BOARD_ID_SOM)
++		gpio_set_value(SOM_WIFI_EN_GPIO, 0);
++
++	gpio_free(BOARD_DETECT_GPIO);
++	gpio_free(SOM_WIFI_EN_GPIO);
++#else
++	if (of_machine_is_compatible("variscite,imx8mp-var-som"))
++		board_id = BOARD_ID_SOM;
++	else if (of_machine_is_compatible("variscite,imx8mp-var-dart"))
++		board_id = BOARD_ID_DART;
++#endif
++
++	return board_id;
++}
++
++#ifdef CONFIG_POWER_PCA9450
++#define PCA9450_I2C_BUS	0
++#define PCA9450_I2C_ADDR	0x25
++#define PCA9450_LSW_CTRL_ADDR	0x2A
++#define REG_DATA_SIZE		1
++
++int setup_sw_en_pmic(void)
++{
++	struct udevice *bus;
++	struct udevice *dev;
++	u8 reg_data[REG_DATA_SIZE];
++	int ret;
++
++	struct var_eeprom *ep = VAR_EEPROM_DATA;
++	int som_rev = SOMREV_MAJOR(ep->somrev);
++
++	/* On DART-MX8M-PLUS v2.0, SW_EN must be set by software to ensure
++	 * that the ethernet PHY is powered up. Set bit 0 of LOADSW_CTRL.
++	 */
++	if (som_rev >= 2) {
++		ret = uclass_get_device_by_seq(UCLASS_I2C, PCA9450_I2C_BUS, &bus);
++		if (ret) {
++			printf("Can't find I2C bus %d\n", PCA9450_I2C_BUS);
++			return ret;
++		}
++
++		ret = dm_i2c_probe(bus, PCA9450_I2C_ADDR, 0, &dev);
++		if (ret) {
++			printf("Can't find device at address 0x%x\n", PCA9450_I2C_ADDR);
++			return ret;
++		}
++
++		ret = dm_i2c_read(dev, PCA9450_LSW_CTRL_ADDR, reg_data, REG_DATA_SIZE);
++		if (ret) {
++			printf("Failed to read address 0x%x\n", PCA9450_I2C_ADDR);
++			return ret;
++		}
++
++		/* Enable SW_EN by setting LOADSW_CTRL bit 0 */
++		reg_data[0] |= 0x01;
++
++		ret = dm_i2c_write(dev, PCA9450_LSW_CTRL_ADDR, reg_data, REG_DATA_SIZE);
++		if (ret) {
++			printf("Failed to write at address 0x%x\n", PCA9450_I2C_ADDR);
++			return ret;
++		}
++	}
++
++	return 0;
++}
++#endif
++
++#if CONFIG_IS_ENABLED(EFI_HAVE_CAPSULE_SUPPORT)
++struct efi_fw_image fw_images[] = {
++	{
++		.image_type_id = IMX_BOOT_IMAGE_GUID,
++		.fw_name = u"IMX8MP-VAR-DART-RAW",
++		.image_index = 1,
++	},
++};
++
++struct efi_capsule_update_info update_info = {
++	.dfu_string = "mmc 2=1 raw 0x40 0x1000",
++	.num_images = ARRAY_SIZE(fw_images),
++	.images = fw_images,
++};
++
++#endif /* EFI_HAVE_CAPSULE_SUPPORT */
++
++int board_early_init_f(void)
++{
++	struct wdog_regs *wdog = (struct wdog_regs *)WDOG1_BASE_ADDR;
++
++	imx_iomux_v3_setup_multiple_pads(wdog_pads, ARRAY_SIZE(wdog_pads));
++
++	set_wdog_reset(wdog);
++
++	return 0;
++}
++
++#ifdef CONFIG_OF_BOARD_SETUP
++int ft_board_setup(void *blob, struct bd_info *bd)
++{
++#ifdef CONFIG_IMX8M_DRAM_INLINE_ECC
++	int rc;
++	phys_addr_t ecc0_start = 0xb0000000;
++	phys_addr_t ecc1_start = 0x130000000;
++	phys_addr_t ecc2_start = 0x1b0000000;
++	size_t ecc_size = 0x10000000;
++
++	rc = add_res_mem_dt_node(blob, "ecc", ecc0_start, ecc_size);
++	if (rc < 0) {
++		printf("Could not create ecc0 reserved-memory node.\n");
++		return rc;
++	}
++
++	rc = add_res_mem_dt_node(blob, "ecc", ecc1_start, ecc_size);
++	if (rc < 0) {
++		printf("Could not create ecc1 reserved-memory node.\n");
++		return rc;
++	}
++
++	rc = add_res_mem_dt_node(blob, "ecc", ecc2_start, ecc_size);
++	if (rc < 0) {
++		printf("Could not create ecc2 reserved-memory node.\n");
++		return rc;
++	}
++#endif
++
++	return 0;
++}
++#endif
++
++#ifdef CONFIG_USB_DWC3
++
++#define USB_PHY_CTRL0			0xF0040
++#define USB_PHY_CTRL0_REF_SSP_EN	BIT(2)
++
++#define USB_PHY_CTRL1			0xF0044
++#define USB_PHY_CTRL1_RESET		BIT(0)
++#define USB_PHY_CTRL1_COMMONONN		BIT(1)
++#define USB_PHY_CTRL1_ATERESET		BIT(3)
++#define USB_PHY_CTRL1_VDATSRCENB0	BIT(19)
++#define USB_PHY_CTRL1_VDATDETENB0	BIT(20)
++
++#define USB_PHY_CTRL2			0xF0048
++#define USB_PHY_CTRL2_TXENABLEN0	BIT(8)
++
++#define USB_PHY_CTRL6			0xF0058
++
++#define HSIO_GPR_BASE					(0x32F10000U)
++#define HSIO_GPR_REG_0					(HSIO_GPR_BASE)
++#define HSIO_GPR_REG_0_USB_CLOCK_MODULE_EN_SHIFT	(1)
++#define HSIO_GPR_REG_0_USB_CLOCK_MODULE_EN		(0x1U << HSIO_GPR_REG_0_USB_CLOCK_MODULE_EN_SHIFT)
++
++static struct dwc3_device dwc3_device_data = {
++#ifdef CONFIG_SPL_BUILD
++	.maximum_speed = USB_SPEED_HIGH,
++#else
++	.maximum_speed = USB_SPEED_SUPER,
++#endif
++	.base = USB1_BASE_ADDR,
++	.dr_mode = USB_DR_MODE_PERIPHERAL,
++	.index = 0,
++	.power_down_scale = 2,
++};
++
++int dm_usb_gadget_handle_interrupts(struct udevice *dev)
++{
++	dwc3_uboot_handle_interrupt(dev);
++	return 0;
++}
++
++static void dwc3_nxp_usb_phy_init(struct dwc3_device *dwc3)
++{
++	u32 RegData;
++
++	/* enable usb clock via hsio gpr */
++	RegData = readl(HSIO_GPR_REG_0);
++	RegData |= HSIO_GPR_REG_0_USB_CLOCK_MODULE_EN;
++	writel(RegData, HSIO_GPR_REG_0);
++
++	/* USB3.0 PHY signal fsel for 100M ref */
++	RegData = readl(dwc3->base + USB_PHY_CTRL0);
++	RegData = (RegData & 0xfffff81f) | (0x2a << 5);
++	writel(RegData, dwc3->base + USB_PHY_CTRL0);
++
++	RegData = readl(dwc3->base + USB_PHY_CTRL6);
++	RegData &= ~0x1;
++	writel(RegData, dwc3->base + USB_PHY_CTRL6);
++
++	RegData = readl(dwc3->base + USB_PHY_CTRL1);
++	RegData &= ~(USB_PHY_CTRL1_VDATSRCENB0 | USB_PHY_CTRL1_VDATDETENB0 |
++			USB_PHY_CTRL1_COMMONONN);
++	RegData |= USB_PHY_CTRL1_RESET | USB_PHY_CTRL1_ATERESET;
++	writel(RegData, dwc3->base + USB_PHY_CTRL1);
++
++	RegData = readl(dwc3->base + USB_PHY_CTRL0);
++	RegData |= USB_PHY_CTRL0_REF_SSP_EN;
++	writel(RegData, dwc3->base + USB_PHY_CTRL0);
++
++	RegData = readl(dwc3->base + USB_PHY_CTRL2);
++	RegData |= USB_PHY_CTRL2_TXENABLEN0;
++	writel(RegData, dwc3->base + USB_PHY_CTRL2);
++
++	RegData = readl(dwc3->base + USB_PHY_CTRL1);
++	RegData &= ~(USB_PHY_CTRL1_RESET | USB_PHY_CTRL1_ATERESET);
++	writel(RegData, dwc3->base + USB_PHY_CTRL1);
++}
++#endif
++
++#if defined(CONFIG_USB_DWC3) || defined(CONFIG_USB_XHCI_IMX8M)
++
++#ifdef CONFIG_EXTCON_PTN5150
++static struct extcon_ptn5150 usb_ptn5150;
++#endif
++
++int board_usb_init(int index, enum usb_init_type init)
++{
++	int ret = 0;
++
++	imx8m_usb_power(index, true);
++
++#if (!defined(CONFIG_SPL_BUILD) && defined(CONFIG_EXTCON_PTN5150))
++	if (index == 0) {
++		/* Verify port is in proper mode */
++		int phy_mode = extcon_ptn5150_phy_mode(&usb_ptn5150);
++
++		/* Only verify phy_mode if ptn5150 is initialized */
++		if (phy_mode >= 0 && phy_mode != init)
++			return -ENODEV;
++	}
++#endif
++
++	if (index == 0 && init == USB_INIT_DEVICE) {
++#ifdef CONFIG_USB_TCPC
++		ret = tcpc_setup_ufp_mode(&port1);
++		if (ret)
++			return ret;
++#endif
++		dwc3_nxp_usb_phy_init(&dwc3_device_data);
++		return dwc3_uboot_init(&dwc3_device_data);
++	} else if (index == 0 && init == USB_INIT_HOST) {
++#ifdef CONFIG_USB_TCPC
++		ret = tcpc_setup_dfp_mode(&port1);
++#endif
++		return ret;
++	}
++
++	return 0;
++}
++
++int board_usb_cleanup(int index, enum usb_init_type init)
++{
++	int ret = 0;
++
++	if (index == 0 && init == USB_INIT_DEVICE) {
++		dwc3_uboot_exit(index);
++	} else if (index == 0 && init == USB_INIT_HOST) {
++#ifdef CONFIG_USB_TCPC
++		ret = tcpc_disable_src_vbus(&port1);
++#endif
++	}
++
++	imx8m_usb_power(index, false);
++
++	return ret;
++}
++
++#ifdef CONFIG_EXTCON_PTN5150
++int board_ehci_usb_phy_mode(struct udevice *dev)
++{
++	int usb_phy_mode = extcon_ptn5150_phy_mode(&usb_ptn5150);
++
++	/* Default to host mode if not connected */
++	if (usb_phy_mode < 0)
++		usb_phy_mode = USB_INIT_HOST;
++
++	return usb_phy_mode;
++}
++#endif
++#endif
++
++#ifdef CONFIG_OF_BOARD_FIXUP
++int vendor_board_fix_fdt(void *fdt_blob)
++{
++	struct var_eeprom *ep = VAR_EEPROM_DATA;
++	int som_rev = SOMREV_MAJOR(ep->somrev);
++
++	if (!fdt_blob) {
++		printf("ERROR: Device tree blob not found.\n");
++		return -EINVAL;
++	}
++
++	if ((var_detect_board_id() == BOARD_ID_DART) && (som_rev >= 2)) {
++		int node_offset, subnode_offset, ret;
++		const char *node_path = "/soc@0/bus@30000000/gpio@30210000";
++		const char *node_name = "eth0_phy_pwr_hog";
++
++		node_offset = fdt_path_offset(fdt_blob, node_path);
++		if (node_offset < 0) {
++			printf("WARNING: couldn't find %s: %s\n", node_path,
++			       fdt_strerror(node_offset));
++			return -ENOENT;
++		}
++
++		subnode_offset = fdt_subnode_offset(fdt_blob, node_offset, node_name);
++		if (subnode_offset < 0) {
++			printf("WARNING: couldn't find %s node: %s\n",
++			       node_name, fdt_strerror(subnode_offset));
++			return -ENOENT;
++		}
++
++		ret = fdt_del_node(fdt_blob, subnode_offset);
++		if (ret < 0) {
++			printf("WARNING: Couldn't delete subnode %s: %s\n",
++			       node_name, fdt_strerror(ret));
++			return ret;
++		}
++	}
++
++	return 0;
++}
++#endif
++
++int board_init(void)
++{
++#ifdef CONFIG_EXTCON_PTN5150
++		extcon_ptn5150_setup(&usb_ptn5150);
++#endif
++#ifdef CONFIG_POWER_PCA9450
++	int ret;
++
++	ret = setup_sw_en_pmic();
++	if (ret)
++		return ret;
++#endif
++
++#if defined(CONFIG_USB_DWC3) || defined(CONFIG_USB_XHCI_IMX8M)
++	init_usb_clk();
++#endif
++
++	return 0;
++}
++
++#define SDRAM_SIZE_STR_LEN 5
++
++int board_late_init(void)
++{
++	int board_id;
++	char sdram_size_str[SDRAM_SIZE_STR_LEN];
++	struct var_eeprom *ep = VAR_EEPROM_DATA;
++	struct var_carrier_eeprom carrier_eeprom;
++	char carrier_rev[CARRIER_REV_LEN] = {0};
++	char som_rev[CARRIER_REV_LEN] = {0};
++
++#ifdef CONFIG_ENV_IS_IN_MMC
++	board_late_mmc_env_init();
++#endif
++#ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
++	env_set("board_name", "DART-MX8MP");
++	env_set("board_rev", "iMX8MP");
++#endif
++
++	snprintf(sdram_size_str, SDRAM_SIZE_STR_LEN, "%d",
++			(int)(gd->ram_size / 1024 / 1024));
++	env_set("sdram_size", sdram_size_str);
++
++	board_id = var_detect_board_id();
++	if (board_id != BOARD_ID_UNDEF) {
++		if (board_id == BOARD_ID_SOM) {
++			env_set("board_name", "VAR-SOM-MX8M-PLUS");
++			env_set("console", "ttymxc1,115200");
++
++			var_carrier_eeprom_read(CARRIER_EEPROM_BUS_SOM, CARRIER_EEPROM_ADDR,
++						&carrier_eeprom);
++		} else if (board_id == BOARD_ID_DART) {
++			env_set("board_name", "DART-MX8M-PLUS");
++
++			var_carrier_eeprom_read(CARRIER_EEPROM_BUS_DART, CARRIER_EEPROM_ADDR,
++						&carrier_eeprom);
++		}
++
++		var_carrier_eeprom_get_revision(&carrier_eeprom, carrier_rev, sizeof(carrier_rev));
++		env_set("carrier_rev", carrier_rev);
++
++		/* SoM Features ENV */
++		env_set("som_has_wbe", (ep->features & VAR_EEPROM_F_WBE) ? "1" : "0");
++
++		/* SoM Rev ENV*/
++		snprintf(som_rev, CARRIER_REV_LEN, "%ld.%ld", SOMREV_MAJOR(ep->somrev),
++			 SOMREV_MINOR(ep->somrev));
++		env_set("som_rev", som_rev);
++	}
++
++	var_setup_mac(ep);
++	var_eeprom_print_prod_info(ep);
++
++	return 0;
++}
++
++#ifdef CONFIG_FSL_FASTBOOT
++#ifdef CONFIG_ANDROID_RECOVERY
++int is_recovery_key_pressing(void)
++{
++	return 0; /*TODO*/
++}
++#endif /*CONFIG_ANDROID_RECOVERY*/
++#endif /*CONFIG_FSL_FASTBOOT*/
++
++#ifdef CONFIG_ANDROID_SUPPORT
++bool is_power_key_pressed(void)
++{
++	return (bool)(!!(readl(SNVS_HPSR) & (0x1 << 6)));
++}
++#endif
++
++#ifdef CONFIG_SPL_MMC
++
++#define UBOOT_RAW_SECTOR_OFFSET 0x40
++unsigned long spl_mmc_get_uboot_raw_sector(struct mmc *mmc, unsigned long raw_sect)
++{
++	u32 boot_dev = spl_boot_device();
++
++	switch (boot_dev) {
++	case BOOT_DEVICE_MMC2:
++		return CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR - UBOOT_RAW_SECTOR_OFFSET;
++	default:
++		return CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR;
++	}
++}
++#endif
+diff --git a/board/canyon/canyon_mx8mp/canyon_mx8mp.h b/board/canyon/canyon_mx8mp/canyon_mx8mp.h
+new file mode 100644
+index 00000000000..d2e23dd9d6f
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/canyon_mx8mp.h
+@@ -0,0 +1,23 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ *
++ * Copyright 2020-2024 Variscite Ltd.
++ *
++ */
++
++#ifndef __CANYON_MX8MP_H__
++#define __CANYON_MX8MP_H__
++
++enum {
++	BOARD_ID_SOM,
++	BOARD_ID_DART,
++	BOARD_ID_UNDEF,
++};
++
++int var_detect_board_id(void);
++
++/* Carrier board EEPROM */
++#define CARRIER_EEPROM_BUS_SOM		0x03
++#define CARRIER_EEPROM_BUS_DART		0x01
++#define CARRIER_EEPROM_ADDR		0x54
++
++#endif
+diff --git a/board/canyon/canyon_mx8mp/lpddr4_timing.c b/board/canyon/canyon_mx8mp/lpddr4_timing.c
+new file mode 100644
+index 00000000000..4d1b86440f7
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/lpddr4_timing.c
+@@ -0,0 +1,1124 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Copyright 2019 NXP
++ *
++ * Generated code from MX8M_DDR_tool
++ *
++ * Align with uboot version:
++ * imx_v2019.04_5.4.x and above version
++ * For imx_v2018.03_4.14.78_1.0.0_ga ~ imx_v2018.04_4.19.35_1.1.0_ga:
++ * please replace #include <asm/arch/ddr.h> with #include <asm/arch/imx8m_ddr.h>
++ */
++
++#include <linux/kernel.h>
++#include <asm/arch/ddr.h>
++
++static struct dram_cfg_param ddr_ddrc_cfg[] = {
++	/** Initialize DDRC registers **/
++	{ 0x3d400304, 0x1 },
++	{ 0x3d400030, 0x1 },
++	{ 0x3d400000, 0xa3080020 },
++	{ 0x3d400020, 0x1323 },
++	{ 0x3d400024, 0x1e84800 },
++	{ 0x3d400064, 0x7a0118 },
++	{ 0x3d400070, 0x7027f90 },
++	{ 0x3d400074, 0x790 },
++	{ 0x3d4000d0, 0xc00307a3 },
++	{ 0x3d4000d4, 0xc50000 },
++	{ 0x3d4000dc, 0xf4003f },
++	{ 0x3d4000e0, 0x330000 },
++	{ 0x3d4000e8, 0x660048 },
++	{ 0x3d4000ec, 0x160048 },
++	{ 0x3d400100, 0x2028222a },
++	{ 0x3d400104, 0x8083f },
++	{ 0x3d40010c, 0xe0e000 },
++	{ 0x3d400110, 0x12040a12 },
++	{ 0x3d400114, 0x2050f0f },
++	{ 0x3d400118, 0x1010009 },
++	{ 0x3d40011c, 0x501 },
++	{ 0x3d400130, 0x20800 },
++	{ 0x3d400134, 0xe100002 },
++	{ 0x3d400138, 0x120 },
++	{ 0x3d400144, 0xc80064 },
++	{ 0x3d400180, 0x3e8001e },
++	{ 0x3d400184, 0x3207a12 },
++	{ 0x3d400188, 0x0 },
++	{ 0x3d400190, 0x49f820e },
++	{ 0x3d400194, 0x80303 },
++	{ 0x3d4001b4, 0x1f0e },
++	{ 0x3d4001a0, 0xe0400018 },
++	{ 0x3d4001a4, 0xdf00e4 },
++	{ 0x3d4001a8, 0x80000000 },
++	{ 0x3d4001b0, 0x11 },
++	{ 0x3d4001c0, 0x1 },
++	{ 0x3d4001c4, 0x1 },
++	{ 0x3d4000f4, 0xc99 },
++	{ 0x3d400108, 0x9121c1c },
++	{ 0x3d400200, 0x17 },
++	{ 0x3d40020c, 0x0 },
++	{ 0x3d400210, 0x1f1f },
++	{ 0x3d400204, 0x80808 },
++	{ 0x3d400214, 0x7070707 },
++	{ 0x3d400218, 0x7070707 },
++	{ 0x3d40021c, 0xf0f },
++	{ 0x3d400250, 0x1705 },
++	{ 0x3d400254, 0x2c },
++	{ 0x3d40025c, 0x4000030 },
++	{ 0x3d400264, 0x900093e7 },
++	{ 0x3d40026c, 0x2005574 },
++	{ 0x3d400400, 0x111 },
++	{ 0x3d400404, 0x72ff },
++	{ 0x3d400408, 0x72ff },
++	{ 0x3d400494, 0x2100e07 },
++	{ 0x3d400498, 0x620096 },
++	{ 0x3d40049c, 0x1100e07 },
++	{ 0x3d4004a0, 0xc8012c },
++	{ 0x3d402020, 0x1021 },
++	{ 0x3d402024, 0x30d400 },
++	{ 0x3d402050, 0x20d000 },
++	{ 0x3d402064, 0xc001c },
++	{ 0x3d4020dc, 0x840000 },
++	{ 0x3d4020e0, 0x330000 },
++	{ 0x3d4020e8, 0x660048 },
++	{ 0x3d4020ec, 0x160048 },
++	{ 0x3d402100, 0xa040305 },
++	{ 0x3d402104, 0x30407 },
++	{ 0x3d402108, 0x203060b },
++	{ 0x3d40210c, 0x505000 },
++	{ 0x3d402110, 0x2040202 },
++	{ 0x3d402114, 0x2030202 },
++	{ 0x3d402118, 0x1010004 },
++	{ 0x3d40211c, 0x301 },
++	{ 0x3d402130, 0x20300 },
++	{ 0x3d402134, 0xa100002 },
++	{ 0x3d402138, 0x1d },
++	{ 0x3d402144, 0x14000a },
++	{ 0x3d402180, 0x640004 },
++	{ 0x3d402190, 0x3818200 },
++	{ 0x3d402194, 0x80303 },
++	{ 0x3d4021b4, 0x100 },
++	{ 0x3d4020f4, 0xc99 },
++	{ 0x3d403020, 0x1021 },
++	{ 0x3d403024, 0xc3500 },
++	{ 0x3d403050, 0x20d000 },
++	{ 0x3d403064, 0x30007 },
++	{ 0x3d4030dc, 0x840000 },
++	{ 0x3d4030e0, 0x330000 },
++	{ 0x3d4030e8, 0x660048 },
++	{ 0x3d4030ec, 0x160048 },
++	{ 0x3d403100, 0xa010102 },
++	{ 0x3d403104, 0x30404 },
++	{ 0x3d403108, 0x203060b },
++	{ 0x3d40310c, 0x505000 },
++	{ 0x3d403110, 0x2040202 },
++	{ 0x3d403114, 0x2030202 },
++	{ 0x3d403118, 0x1010004 },
++	{ 0x3d40311c, 0x301 },
++	{ 0x3d403130, 0x20300 },
++	{ 0x3d403134, 0xa100002 },
++	{ 0x3d403138, 0x8 },
++	{ 0x3d403144, 0x50003 },
++	{ 0x3d403180, 0x190004 },
++	{ 0x3d403190, 0x3818200 },
++	{ 0x3d403194, 0x80303 },
++	{ 0x3d4031b4, 0x100 },
++	{ 0x3d4030f4, 0xc99 },
++	{ 0x3d400028, 0x0 },
++};
++
++/* PHY Initialize Configuration */
++static struct dram_cfg_param ddr_ddrphy_cfg[] = {
++	{ 0x100a0, 0x0 },
++	{ 0x100a1, 0x1 },
++	{ 0x100a2, 0x2 },
++	{ 0x100a3, 0x3 },
++	{ 0x100a4, 0x4 },
++	{ 0x100a5, 0x5 },
++	{ 0x100a6, 0x6 },
++	{ 0x100a7, 0x7 },
++	{ 0x110a0, 0x0 },
++	{ 0x110a1, 0x1 },
++	{ 0x110a2, 0x3 },
++	{ 0x110a3, 0x4 },
++	{ 0x110a4, 0x5 },
++	{ 0x110a5, 0x2 },
++	{ 0x110a6, 0x7 },
++	{ 0x110a7, 0x6 },
++	{ 0x120a0, 0x0 },
++	{ 0x120a1, 0x1 },
++	{ 0x120a2, 0x3 },
++	{ 0x120a3, 0x2 },
++	{ 0x120a4, 0x5 },
++	{ 0x120a5, 0x4 },
++	{ 0x120a6, 0x7 },
++	{ 0x120a7, 0x6 },
++	{ 0x130a0, 0x0 },
++	{ 0x130a1, 0x1 },
++	{ 0x130a2, 0x2 },
++	{ 0x130a3, 0x3 },
++	{ 0x130a4, 0x4 },
++	{ 0x130a5, 0x5 },
++	{ 0x130a6, 0x6 },
++	{ 0x130a7, 0x7 },
++	{ 0x1005f, 0x1ff },
++	{ 0x1015f, 0x1ff },
++	{ 0x1105f, 0x1ff },
++	{ 0x1115f, 0x1ff },
++	{ 0x1205f, 0x1ff },
++	{ 0x1215f, 0x1ff },
++	{ 0x1305f, 0x1ff },
++	{ 0x1315f, 0x1ff },
++	{ 0x11005f, 0x1ff },
++	{ 0x11015f, 0x1ff },
++	{ 0x11105f, 0x1ff },
++	{ 0x11115f, 0x1ff },
++	{ 0x11205f, 0x1ff },
++	{ 0x11215f, 0x1ff },
++	{ 0x11305f, 0x1ff },
++	{ 0x11315f, 0x1ff },
++	{ 0x21005f, 0x1ff },
++	{ 0x21015f, 0x1ff },
++	{ 0x21105f, 0x1ff },
++	{ 0x21115f, 0x1ff },
++	{ 0x21205f, 0x1ff },
++	{ 0x21215f, 0x1ff },
++	{ 0x21305f, 0x1ff },
++	{ 0x21315f, 0x1ff },
++	{ 0x55, 0x1ff },
++	{ 0x1055, 0x1ff },
++	{ 0x2055, 0x1ff },
++	{ 0x3055, 0x1ff },
++	{ 0x4055, 0x1ff },
++	{ 0x5055, 0x1ff },
++	{ 0x6055, 0x1ff },
++	{ 0x7055, 0x1ff },
++	{ 0x8055, 0x1ff },
++	{ 0x9055, 0x1ff },
++	{ 0x200c5, 0x18 },
++	{ 0x1200c5, 0x7 },
++	{ 0x2200c5, 0x7 },
++	{ 0x2002e, 0x2 },
++	{ 0x12002e, 0x2 },
++	{ 0x22002e, 0x2 },
++	{ 0x90204, 0x0 },
++	{ 0x190204, 0x0 },
++	{ 0x290204, 0x0 },
++	{ 0x20024, 0x1e3 },
++	{ 0x2003a, 0x2 },
++	{ 0x120024, 0x1e3 },
++	{ 0x2003a, 0x2 },
++	{ 0x220024, 0x1e3 },
++	{ 0x2003a, 0x2 },
++	{ 0x20056, 0x3 },
++	{ 0x120056, 0x3 },
++	{ 0x220056, 0x3 },
++	{ 0x1004d, 0xe00 },
++	{ 0x1014d, 0xe00 },
++	{ 0x1104d, 0xe00 },
++	{ 0x1114d, 0xe00 },
++	{ 0x1204d, 0xe00 },
++	{ 0x1214d, 0xe00 },
++	{ 0x1304d, 0xe00 },
++	{ 0x1314d, 0xe00 },
++	{ 0x11004d, 0xe00 },
++	{ 0x11014d, 0xe00 },
++	{ 0x11104d, 0xe00 },
++	{ 0x11114d, 0xe00 },
++	{ 0x11204d, 0xe00 },
++	{ 0x11214d, 0xe00 },
++	{ 0x11304d, 0xe00 },
++	{ 0x11314d, 0xe00 },
++	{ 0x21004d, 0xe00 },
++	{ 0x21014d, 0xe00 },
++	{ 0x21104d, 0xe00 },
++	{ 0x21114d, 0xe00 },
++	{ 0x21204d, 0xe00 },
++	{ 0x21214d, 0xe00 },
++	{ 0x21304d, 0xe00 },
++	{ 0x21314d, 0xe00 },
++	{ 0x10049, 0xeba },
++	{ 0x10149, 0xeba },
++	{ 0x11049, 0xeba },
++	{ 0x11149, 0xeba },
++	{ 0x12049, 0xeba },
++	{ 0x12149, 0xeba },
++	{ 0x13049, 0xeba },
++	{ 0x13149, 0xeba },
++	{ 0x110049, 0xeba },
++	{ 0x110149, 0xeba },
++	{ 0x111049, 0xeba },
++	{ 0x111149, 0xeba },
++	{ 0x112049, 0xeba },
++	{ 0x112149, 0xeba },
++	{ 0x113049, 0xeba },
++	{ 0x113149, 0xeba },
++	{ 0x210049, 0xeba },
++	{ 0x210149, 0xeba },
++	{ 0x211049, 0xeba },
++	{ 0x211149, 0xeba },
++	{ 0x212049, 0xeba },
++	{ 0x212149, 0xeba },
++	{ 0x213049, 0xeba },
++	{ 0x213149, 0xeba },
++	{ 0x43, 0x63 },
++	{ 0x1043, 0x63 },
++	{ 0x2043, 0x63 },
++	{ 0x3043, 0x63 },
++	{ 0x4043, 0x63 },
++	{ 0x5043, 0x63 },
++	{ 0x6043, 0x63 },
++	{ 0x7043, 0x63 },
++	{ 0x8043, 0x63 },
++	{ 0x9043, 0x63 },
++	{ 0x20018, 0x3 },
++	{ 0x20075, 0x4 },
++	{ 0x20050, 0x0 },
++	{ 0x20008, 0x3e8 },
++	{ 0x120008, 0x64 },
++	{ 0x220008, 0x19 },
++	{ 0x20088, 0x9 },
++	{ 0x200b2, 0x104 },
++	{ 0x10043, 0x5a1 },
++	{ 0x10143, 0x5a1 },
++	{ 0x11043, 0x5a1 },
++	{ 0x11143, 0x5a1 },
++	{ 0x12043, 0x5a1 },
++	{ 0x12143, 0x5a1 },
++	{ 0x13043, 0x5a1 },
++	{ 0x13143, 0x5a1 },
++	{ 0x1200b2, 0x104 },
++	{ 0x110043, 0x5a1 },
++	{ 0x110143, 0x5a1 },
++	{ 0x111043, 0x5a1 },
++	{ 0x111143, 0x5a1 },
++	{ 0x112043, 0x5a1 },
++	{ 0x112143, 0x5a1 },
++	{ 0x113043, 0x5a1 },
++	{ 0x113143, 0x5a1 },
++	{ 0x2200b2, 0x104 },
++	{ 0x210043, 0x5a1 },
++	{ 0x210143, 0x5a1 },
++	{ 0x211043, 0x5a1 },
++	{ 0x211143, 0x5a1 },
++	{ 0x212043, 0x5a1 },
++	{ 0x212143, 0x5a1 },
++	{ 0x213043, 0x5a1 },
++	{ 0x213143, 0x5a1 },
++	{ 0x200fa, 0x1 },
++	{ 0x1200fa, 0x1 },
++	{ 0x2200fa, 0x1 },
++	{ 0x20019, 0x1 },
++	{ 0x120019, 0x1 },
++	{ 0x220019, 0x1 },
++	{ 0x200f0, 0x660 },
++	{ 0x200f1, 0x0 },
++	{ 0x200f2, 0x4444 },
++	{ 0x200f3, 0x8888 },
++	{ 0x200f4, 0x5665 },
++	{ 0x200f5, 0x0 },
++	{ 0x200f6, 0x0 },
++	{ 0x200f7, 0xf000 },
++	{ 0x20025, 0x0 },
++	{ 0x2002d, 0x0 },
++	{ 0x12002d, 0x0 },
++	{ 0x22002d, 0x0 },
++	{ 0x2007d, 0x212 },
++	{ 0x12007d, 0x212 },
++	{ 0x22007d, 0x212 },
++	{ 0x2007c, 0x61 },
++	{ 0x12007c, 0x61 },
++	{ 0x22007c, 0x61 },
++	{ 0x1004a, 0x500 },
++	{ 0x1104a, 0x500 },
++	{ 0x1204a, 0x500 },
++	{ 0x1304a, 0x500 },
++	{ 0x2002c, 0x0 },
++};
++
++/* P0 message block parameter for training firmware */
++static struct dram_cfg_param ddr_fsp0_cfg[] = {
++	{ 0xd0000, 0x0 },
++	{ 0x54003, 0xfa0 },
++	{ 0x54004, 0x2 },
++	{ 0x54005, 0x2228 },
++	{ 0x54006, 0x14 },
++	{ 0x54008, 0x131f },
++	{ 0x54009, 0xc8 },
++	{ 0x5400b, 0x2 },
++	{ 0x5400f, 0x100 },
++	{ 0x54012, 0x310 },
++	{ 0x54019, 0x3ff4 },
++	{ 0x5401a, 0x33 },
++	{ 0x5401b, 0x4866 },
++	{ 0x5401c, 0x4800 },
++	{ 0x5401e, 0x16 },
++	{ 0x5401f, 0x3ff4 },
++	{ 0x54020, 0x33 },
++	{ 0x54021, 0x4866 },
++	{ 0x54022, 0x4800 },
++	{ 0x54024, 0x16 },
++	{ 0x5402b, 0x1000 },
++	{ 0x5402c, 0x3 },
++	{ 0x54032, 0xf400 },
++	{ 0x54033, 0x333f },
++	{ 0x54034, 0x6600 },
++	{ 0x54035, 0x48 },
++	{ 0x54036, 0x48 },
++	{ 0x54037, 0x1600 },
++	{ 0x54038, 0xf400 },
++	{ 0x54039, 0x333f },
++	{ 0x5403a, 0x6600 },
++	{ 0x5403b, 0x48 },
++	{ 0x5403c, 0x48 },
++	{ 0x5403d, 0x1600 },
++	{ 0xd0000, 0x1 },
++};
++
++/* P1 message block parameter for training firmware */
++static struct dram_cfg_param ddr_fsp1_cfg[] = {
++	{ 0xd0000, 0x0 },
++	{ 0x54002, 0x101 },
++	{ 0x54003, 0x190 },
++	{ 0x54004, 0x2 },
++	{ 0x54005, 0x2228 },
++	{ 0x54006, 0x14 },
++	{ 0x54008, 0x121f },
++	{ 0x54009, 0xc8 },
++	{ 0x5400b, 0x2 },
++	{ 0x5400f, 0x100 },
++	{ 0x54012, 0x310 },
++	{ 0x54019, 0x84 },
++	{ 0x5401a, 0x33 },
++	{ 0x5401b, 0x4866 },
++	{ 0x5401c, 0x4800 },
++	{ 0x5401e, 0x16 },
++	{ 0x5401f, 0x84 },
++	{ 0x54020, 0x33 },
++	{ 0x54021, 0x4866 },
++	{ 0x54022, 0x4800 },
++	{ 0x54024, 0x16 },
++	{ 0x5402b, 0x1000 },
++	{ 0x5402c, 0x3 },
++	{ 0x54032, 0x8400 },
++	{ 0x54033, 0x3300 },
++	{ 0x54034, 0x6600 },
++	{ 0x54035, 0x48 },
++	{ 0x54036, 0x48 },
++	{ 0x54037, 0x1600 },
++	{ 0x54038, 0x8400 },
++	{ 0x54039, 0x3300 },
++	{ 0x5403a, 0x6600 },
++	{ 0x5403b, 0x48 },
++	{ 0x5403c, 0x48 },
++	{ 0x5403d, 0x1600 },
++	{ 0xd0000, 0x1 },
++};
++
++/* P2 message block parameter for training firmware */
++static struct dram_cfg_param ddr_fsp2_cfg[] = {
++	{ 0xd0000, 0x0 },
++	{ 0x54002, 0x102 },
++	{ 0x54003, 0x64 },
++	{ 0x54004, 0x2 },
++	{ 0x54005, 0x2228 },
++	{ 0x54006, 0x14 },
++	{ 0x54008, 0x121f },
++	{ 0x54009, 0xc8 },
++	{ 0x5400b, 0x2 },
++	{ 0x5400f, 0x100 },
++	{ 0x54012, 0x310 },
++	{ 0x54019, 0x84 },
++	{ 0x5401a, 0x33 },
++	{ 0x5401b, 0x4866 },
++	{ 0x5401c, 0x4800 },
++	{ 0x5401e, 0x16 },
++	{ 0x5401f, 0x84 },
++	{ 0x54020, 0x33 },
++	{ 0x54021, 0x4866 },
++	{ 0x54022, 0x4800 },
++	{ 0x54024, 0x16 },
++	{ 0x5402b, 0x1000 },
++	{ 0x5402c, 0x3 },
++	{ 0x54032, 0x8400 },
++	{ 0x54033, 0x3300 },
++	{ 0x54034, 0x6600 },
++	{ 0x54035, 0x48 },
++	{ 0x54036, 0x48 },
++	{ 0x54037, 0x1600 },
++	{ 0x54038, 0x8400 },
++	{ 0x54039, 0x3300 },
++	{ 0x5403a, 0x6600 },
++	{ 0x5403b, 0x48 },
++	{ 0x5403c, 0x48 },
++	{ 0x5403d, 0x1600 },
++	{ 0xd0000, 0x1 },
++};
++
++/* P0 2D message block parameter for training firmware */
++static struct dram_cfg_param ddr_fsp0_2d_cfg[] = {
++	{ 0xd0000, 0x0 },
++	{ 0x54003, 0xfa0 },
++	{ 0x54004, 0x2 },
++	{ 0x54005, 0x2228 },
++	{ 0x54006, 0x14 },
++	{ 0x54008, 0x61 },
++	{ 0x54009, 0xc8 },
++	{ 0x5400b, 0x2 },
++	{ 0x5400f, 0x100 },
++	{ 0x54010, 0x1f7f },
++	{ 0x54012, 0x310 },
++	{ 0x54019, 0x3ff4 },
++	{ 0x5401a, 0x33 },
++	{ 0x5401b, 0x4866 },
++	{ 0x5401c, 0x4800 },
++	{ 0x5401e, 0x16 },
++	{ 0x5401f, 0x3ff4 },
++	{ 0x54020, 0x33 },
++	{ 0x54021, 0x4866 },
++	{ 0x54022, 0x4800 },
++	{ 0x54024, 0x16 },
++	{ 0x5402b, 0x1000 },
++	{ 0x5402c, 0x3 },
++	{ 0x54032, 0xf400 },
++	{ 0x54033, 0x333f },
++	{ 0x54034, 0x6600 },
++	{ 0x54035, 0x48 },
++	{ 0x54036, 0x48 },
++	{ 0x54037, 0x1600 },
++	{ 0x54038, 0xf400 },
++	{ 0x54039, 0x333f },
++	{ 0x5403a, 0x6600 },
++	{ 0x5403b, 0x48 },
++	{ 0x5403c, 0x48 },
++	{ 0x5403d, 0x1600 },
++	{ 0xd0000, 0x1 },
++};
++
++/* DRAM PHY init engine image */
++static struct dram_cfg_param ddr_phy_pie[] = {
++	{ 0xd0000, 0x0 },
++	{ 0x90000, 0x10 },
++	{ 0x90001, 0x400 },
++	{ 0x90002, 0x10e },
++	{ 0x90003, 0x0 },
++	{ 0x90004, 0x0 },
++	{ 0x90005, 0x8 },
++	{ 0x90029, 0xb },
++	{ 0x9002a, 0x480 },
++	{ 0x9002b, 0x109 },
++	{ 0x9002c, 0x8 },
++	{ 0x9002d, 0x448 },
++	{ 0x9002e, 0x139 },
++	{ 0x9002f, 0x8 },
++	{ 0x90030, 0x478 },
++	{ 0x90031, 0x109 },
++	{ 0x90032, 0x0 },
++	{ 0x90033, 0xe8 },
++	{ 0x90034, 0x109 },
++	{ 0x90035, 0x2 },
++	{ 0x90036, 0x10 },
++	{ 0x90037, 0x139 },
++	{ 0x90038, 0xb },
++	{ 0x90039, 0x7c0 },
++	{ 0x9003a, 0x139 },
++	{ 0x9003b, 0x44 },
++	{ 0x9003c, 0x633 },
++	{ 0x9003d, 0x159 },
++	{ 0x9003e, 0x14f },
++	{ 0x9003f, 0x630 },
++	{ 0x90040, 0x159 },
++	{ 0x90041, 0x47 },
++	{ 0x90042, 0x633 },
++	{ 0x90043, 0x149 },
++	{ 0x90044, 0x4f },
++	{ 0x90045, 0x633 },
++	{ 0x90046, 0x179 },
++	{ 0x90047, 0x8 },
++	{ 0x90048, 0xe0 },
++	{ 0x90049, 0x109 },
++	{ 0x9004a, 0x0 },
++	{ 0x9004b, 0x7c8 },
++	{ 0x9004c, 0x109 },
++	{ 0x9004d, 0x0 },
++	{ 0x9004e, 0x1 },
++	{ 0x9004f, 0x8 },
++	{ 0x90050, 0x0 },
++	{ 0x90051, 0x45a },
++	{ 0x90052, 0x9 },
++	{ 0x90053, 0x0 },
++	{ 0x90054, 0x448 },
++	{ 0x90055, 0x109 },
++	{ 0x90056, 0x40 },
++	{ 0x90057, 0x633 },
++	{ 0x90058, 0x179 },
++	{ 0x90059, 0x1 },
++	{ 0x9005a, 0x618 },
++	{ 0x9005b, 0x109 },
++	{ 0x9005c, 0x40c0 },
++	{ 0x9005d, 0x633 },
++	{ 0x9005e, 0x149 },
++	{ 0x9005f, 0x8 },
++	{ 0x90060, 0x4 },
++	{ 0x90061, 0x48 },
++	{ 0x90062, 0x4040 },
++	{ 0x90063, 0x633 },
++	{ 0x90064, 0x149 },
++	{ 0x90065, 0x0 },
++	{ 0x90066, 0x4 },
++	{ 0x90067, 0x48 },
++	{ 0x90068, 0x40 },
++	{ 0x90069, 0x633 },
++	{ 0x9006a, 0x149 },
++	{ 0x9006b, 0x10 },
++	{ 0x9006c, 0x4 },
++	{ 0x9006d, 0x18 },
++	{ 0x9006e, 0x0 },
++	{ 0x9006f, 0x4 },
++	{ 0x90070, 0x78 },
++	{ 0x90071, 0x549 },
++	{ 0x90072, 0x633 },
++	{ 0x90073, 0x159 },
++	{ 0x90074, 0xd49 },
++	{ 0x90075, 0x633 },
++	{ 0x90076, 0x159 },
++	{ 0x90077, 0x94a },
++	{ 0x90078, 0x633 },
++	{ 0x90079, 0x159 },
++	{ 0x9007a, 0x441 },
++	{ 0x9007b, 0x633 },
++	{ 0x9007c, 0x149 },
++	{ 0x9007d, 0x42 },
++	{ 0x9007e, 0x633 },
++	{ 0x9007f, 0x149 },
++	{ 0x90080, 0x1 },
++	{ 0x90081, 0x633 },
++	{ 0x90082, 0x149 },
++	{ 0x90083, 0x0 },
++	{ 0x90084, 0xe0 },
++	{ 0x90085, 0x109 },
++	{ 0x90086, 0xa },
++	{ 0x90087, 0x10 },
++	{ 0x90088, 0x109 },
++	{ 0x90089, 0x9 },
++	{ 0x9008a, 0x3c0 },
++	{ 0x9008b, 0x149 },
++	{ 0x9008c, 0x9 },
++	{ 0x9008d, 0x3c0 },
++	{ 0x9008e, 0x159 },
++	{ 0x9008f, 0x18 },
++	{ 0x90090, 0x10 },
++	{ 0x90091, 0x109 },
++	{ 0x90092, 0x0 },
++	{ 0x90093, 0x3c0 },
++	{ 0x90094, 0x109 },
++	{ 0x90095, 0x18 },
++	{ 0x90096, 0x4 },
++	{ 0x90097, 0x48 },
++	{ 0x90098, 0x18 },
++	{ 0x90099, 0x4 },
++	{ 0x9009a, 0x58 },
++	{ 0x9009b, 0xb },
++	{ 0x9009c, 0x10 },
++	{ 0x9009d, 0x109 },
++	{ 0x9009e, 0x1 },
++	{ 0x9009f, 0x10 },
++	{ 0x900a0, 0x109 },
++	{ 0x900a1, 0x5 },
++	{ 0x900a2, 0x7c0 },
++	{ 0x900a3, 0x109 },
++	{ 0x40000, 0x811 },
++	{ 0x40020, 0x880 },
++	{ 0x40040, 0x0 },
++	{ 0x40060, 0x0 },
++	{ 0x40001, 0x4008 },
++	{ 0x40021, 0x83 },
++	{ 0x40041, 0x4f },
++	{ 0x40061, 0x0 },
++	{ 0x40002, 0x4040 },
++	{ 0x40022, 0x83 },
++	{ 0x40042, 0x51 },
++	{ 0x40062, 0x0 },
++	{ 0x40003, 0x811 },
++	{ 0x40023, 0x880 },
++	{ 0x40043, 0x0 },
++	{ 0x40063, 0x0 },
++	{ 0x40004, 0x720 },
++	{ 0x40024, 0xf },
++	{ 0x40044, 0x1740 },
++	{ 0x40064, 0x0 },
++	{ 0x40005, 0x16 },
++	{ 0x40025, 0x83 },
++	{ 0x40045, 0x4b },
++	{ 0x40065, 0x0 },
++	{ 0x40006, 0x716 },
++	{ 0x40026, 0xf },
++	{ 0x40046, 0x2001 },
++	{ 0x40066, 0x0 },
++	{ 0x40007, 0x716 },
++	{ 0x40027, 0xf },
++	{ 0x40047, 0x2800 },
++	{ 0x40067, 0x0 },
++	{ 0x40008, 0x716 },
++	{ 0x40028, 0xf },
++	{ 0x40048, 0xf00 },
++	{ 0x40068, 0x0 },
++	{ 0x40009, 0x720 },
++	{ 0x40029, 0xf },
++	{ 0x40049, 0x1400 },
++	{ 0x40069, 0x0 },
++	{ 0x4000a, 0xe08 },
++	{ 0x4002a, 0xc15 },
++	{ 0x4004a, 0x0 },
++	{ 0x4006a, 0x0 },
++	{ 0x4000b, 0x625 },
++	{ 0x4002b, 0x15 },
++	{ 0x4004b, 0x0 },
++	{ 0x4006b, 0x0 },
++	{ 0x4000c, 0x4028 },
++	{ 0x4002c, 0x80 },
++	{ 0x4004c, 0x0 },
++	{ 0x4006c, 0x0 },
++	{ 0x4000d, 0xe08 },
++	{ 0x4002d, 0xc1a },
++	{ 0x4004d, 0x0 },
++	{ 0x4006d, 0x0 },
++	{ 0x4000e, 0x625 },
++	{ 0x4002e, 0x1a },
++	{ 0x4004e, 0x0 },
++	{ 0x4006e, 0x0 },
++	{ 0x4000f, 0x4040 },
++	{ 0x4002f, 0x80 },
++	{ 0x4004f, 0x0 },
++	{ 0x4006f, 0x0 },
++	{ 0x40010, 0x2604 },
++	{ 0x40030, 0x15 },
++	{ 0x40050, 0x0 },
++	{ 0x40070, 0x0 },
++	{ 0x40011, 0x708 },
++	{ 0x40031, 0x5 },
++	{ 0x40051, 0x0 },
++	{ 0x40071, 0x2002 },
++	{ 0x40012, 0x8 },
++	{ 0x40032, 0x80 },
++	{ 0x40052, 0x0 },
++	{ 0x40072, 0x0 },
++	{ 0x40013, 0x2604 },
++	{ 0x40033, 0x1a },
++	{ 0x40053, 0x0 },
++	{ 0x40073, 0x0 },
++	{ 0x40014, 0x708 },
++	{ 0x40034, 0xa },
++	{ 0x40054, 0x0 },
++	{ 0x40074, 0x2002 },
++	{ 0x40015, 0x4040 },
++	{ 0x40035, 0x80 },
++	{ 0x40055, 0x0 },
++	{ 0x40075, 0x0 },
++	{ 0x40016, 0x60a },
++	{ 0x40036, 0x15 },
++	{ 0x40056, 0x1200 },
++	{ 0x40076, 0x0 },
++	{ 0x40017, 0x61a },
++	{ 0x40037, 0x15 },
++	{ 0x40057, 0x1300 },
++	{ 0x40077, 0x0 },
++	{ 0x40018, 0x60a },
++	{ 0x40038, 0x1a },
++	{ 0x40058, 0x1200 },
++	{ 0x40078, 0x0 },
++	{ 0x40019, 0x642 },
++	{ 0x40039, 0x1a },
++	{ 0x40059, 0x1300 },
++	{ 0x40079, 0x0 },
++	{ 0x4001a, 0x4808 },
++	{ 0x4003a, 0x880 },
++	{ 0x4005a, 0x0 },
++	{ 0x4007a, 0x0 },
++	{ 0x900a4, 0x0 },
++	{ 0x900a5, 0x790 },
++	{ 0x900a6, 0x11a },
++	{ 0x900a7, 0x8 },
++	{ 0x900a8, 0x7aa },
++	{ 0x900a9, 0x2a },
++	{ 0x900aa, 0x10 },
++	{ 0x900ab, 0x7b2 },
++	{ 0x900ac, 0x2a },
++	{ 0x900ad, 0x0 },
++	{ 0x900ae, 0x7c8 },
++	{ 0x900af, 0x109 },
++	{ 0x900b0, 0x10 },
++	{ 0x900b1, 0x10 },
++	{ 0x900b2, 0x109 },
++	{ 0x900b3, 0x10 },
++	{ 0x900b4, 0x2a8 },
++	{ 0x900b5, 0x129 },
++	{ 0x900b6, 0x8 },
++	{ 0x900b7, 0x370 },
++	{ 0x900b8, 0x129 },
++	{ 0x900b9, 0xa },
++	{ 0x900ba, 0x3c8 },
++	{ 0x900bb, 0x1a9 },
++	{ 0x900bc, 0xc },
++	{ 0x900bd, 0x408 },
++	{ 0x900be, 0x199 },
++	{ 0x900bf, 0x14 },
++	{ 0x900c0, 0x790 },
++	{ 0x900c1, 0x11a },
++	{ 0x900c2, 0x8 },
++	{ 0x900c3, 0x4 },
++	{ 0x900c4, 0x18 },
++	{ 0x900c5, 0xe },
++	{ 0x900c6, 0x408 },
++	{ 0x900c7, 0x199 },
++	{ 0x900c8, 0x8 },
++	{ 0x900c9, 0x8568 },
++	{ 0x900ca, 0x108 },
++	{ 0x900cb, 0x18 },
++	{ 0x900cc, 0x790 },
++	{ 0x900cd, 0x16a },
++	{ 0x900ce, 0x8 },
++	{ 0x900cf, 0x1d8 },
++	{ 0x900d0, 0x169 },
++	{ 0x900d1, 0x10 },
++	{ 0x900d2, 0x8558 },
++	{ 0x900d3, 0x168 },
++	{ 0x900d4, 0x70 },
++	{ 0x900d5, 0x788 },
++	{ 0x900d6, 0x16a },
++	{ 0x900d7, 0x1ff8 },
++	{ 0x900d8, 0x85a8 },
++	{ 0x900d9, 0x1e8 },
++	{ 0x900da, 0x50 },
++	{ 0x900db, 0x798 },
++	{ 0x900dc, 0x16a },
++	{ 0x900dd, 0x60 },
++	{ 0x900de, 0x7a0 },
++	{ 0x900df, 0x16a },
++	{ 0x900e0, 0x8 },
++	{ 0x900e1, 0x8310 },
++	{ 0x900e2, 0x168 },
++	{ 0x900e3, 0x8 },
++	{ 0x900e4, 0xa310 },
++	{ 0x900e5, 0x168 },
++	{ 0x900e6, 0xa },
++	{ 0x900e7, 0x408 },
++	{ 0x900e8, 0x169 },
++	{ 0x900e9, 0x6e },
++	{ 0x900ea, 0x0 },
++	{ 0x900eb, 0x68 },
++	{ 0x900ec, 0x0 },
++	{ 0x900ed, 0x408 },
++	{ 0x900ee, 0x169 },
++	{ 0x900ef, 0x0 },
++	{ 0x900f0, 0x8310 },
++	{ 0x900f1, 0x168 },
++	{ 0x900f2, 0x0 },
++	{ 0x900f3, 0xa310 },
++	{ 0x900f4, 0x168 },
++	{ 0x900f5, 0x1ff8 },
++	{ 0x900f6, 0x85a8 },
++	{ 0x900f7, 0x1e8 },
++	{ 0x900f8, 0x68 },
++	{ 0x900f9, 0x798 },
++	{ 0x900fa, 0x16a },
++	{ 0x900fb, 0x78 },
++	{ 0x900fc, 0x7a0 },
++	{ 0x900fd, 0x16a },
++	{ 0x900fe, 0x68 },
++	{ 0x900ff, 0x790 },
++	{ 0x90100, 0x16a },
++	{ 0x90101, 0x8 },
++	{ 0x90102, 0x8b10 },
++	{ 0x90103, 0x168 },
++	{ 0x90104, 0x8 },
++	{ 0x90105, 0xab10 },
++	{ 0x90106, 0x168 },
++	{ 0x90107, 0xa },
++	{ 0x90108, 0x408 },
++	{ 0x90109, 0x169 },
++	{ 0x9010a, 0x58 },
++	{ 0x9010b, 0x0 },
++	{ 0x9010c, 0x68 },
++	{ 0x9010d, 0x0 },
++	{ 0x9010e, 0x408 },
++	{ 0x9010f, 0x169 },
++	{ 0x90110, 0x0 },
++	{ 0x90111, 0x8b10 },
++	{ 0x90112, 0x168 },
++	{ 0x90113, 0x1 },
++	{ 0x90114, 0xab10 },
++	{ 0x90115, 0x168 },
++	{ 0x90116, 0x0 },
++	{ 0x90117, 0x1d8 },
++	{ 0x90118, 0x169 },
++	{ 0x90119, 0x80 },
++	{ 0x9011a, 0x790 },
++	{ 0x9011b, 0x16a },
++	{ 0x9011c, 0x18 },
++	{ 0x9011d, 0x7aa },
++	{ 0x9011e, 0x6a },
++	{ 0x9011f, 0xa },
++	{ 0x90120, 0x0 },
++	{ 0x90121, 0x1e9 },
++	{ 0x90122, 0x8 },
++	{ 0x90123, 0x8080 },
++	{ 0x90124, 0x108 },
++	{ 0x90125, 0xf },
++	{ 0x90126, 0x408 },
++	{ 0x90127, 0x169 },
++	{ 0x90128, 0xc },
++	{ 0x90129, 0x0 },
++	{ 0x9012a, 0x68 },
++	{ 0x9012b, 0x9 },
++	{ 0x9012c, 0x0 },
++	{ 0x9012d, 0x1a9 },
++	{ 0x9012e, 0x0 },
++	{ 0x9012f, 0x408 },
++	{ 0x90130, 0x169 },
++	{ 0x90131, 0x0 },
++	{ 0x90132, 0x8080 },
++	{ 0x90133, 0x108 },
++	{ 0x90134, 0x8 },
++	{ 0x90135, 0x7aa },
++	{ 0x90136, 0x6a },
++	{ 0x90137, 0x0 },
++	{ 0x90138, 0x8568 },
++	{ 0x90139, 0x108 },
++	{ 0x9013a, 0xb7 },
++	{ 0x9013b, 0x790 },
++	{ 0x9013c, 0x16a },
++	{ 0x9013d, 0x1f },
++	{ 0x9013e, 0x0 },
++	{ 0x9013f, 0x68 },
++	{ 0x90140, 0x8 },
++	{ 0x90141, 0x8558 },
++	{ 0x90142, 0x168 },
++	{ 0x90143, 0xf },
++	{ 0x90144, 0x408 },
++	{ 0x90145, 0x169 },
++	{ 0x90146, 0xd },
++	{ 0x90147, 0x0 },
++	{ 0x90148, 0x68 },
++	{ 0x90149, 0x0 },
++	{ 0x9014a, 0x408 },
++	{ 0x9014b, 0x169 },
++	{ 0x9014c, 0x0 },
++	{ 0x9014d, 0x8558 },
++	{ 0x9014e, 0x168 },
++	{ 0x9014f, 0x8 },
++	{ 0x90150, 0x3c8 },
++	{ 0x90151, 0x1a9 },
++	{ 0x90152, 0x3 },
++	{ 0x90153, 0x370 },
++	{ 0x90154, 0x129 },
++	{ 0x90155, 0x20 },
++	{ 0x90156, 0x2aa },
++	{ 0x90157, 0x9 },
++	{ 0x90158, 0x8 },
++	{ 0x90159, 0xe8 },
++	{ 0x9015a, 0x109 },
++	{ 0x9015b, 0x0 },
++	{ 0x9015c, 0x8140 },
++	{ 0x9015d, 0x10c },
++	{ 0x9015e, 0x10 },
++	{ 0x9015f, 0x8138 },
++	{ 0x90160, 0x104 },
++	{ 0x90161, 0x8 },
++	{ 0x90162, 0x448 },
++	{ 0x90163, 0x109 },
++	{ 0x90164, 0xf },
++	{ 0x90165, 0x7c0 },
++	{ 0x90166, 0x109 },
++	{ 0x90167, 0x0 },
++	{ 0x90168, 0xe8 },
++	{ 0x90169, 0x109 },
++	{ 0x9016a, 0x47 },
++	{ 0x9016b, 0x630 },
++	{ 0x9016c, 0x109 },
++	{ 0x9016d, 0x8 },
++	{ 0x9016e, 0x618 },
++	{ 0x9016f, 0x109 },
++	{ 0x90170, 0x8 },
++	{ 0x90171, 0xe0 },
++	{ 0x90172, 0x109 },
++	{ 0x90173, 0x0 },
++	{ 0x90174, 0x7c8 },
++	{ 0x90175, 0x109 },
++	{ 0x90176, 0x8 },
++	{ 0x90177, 0x8140 },
++	{ 0x90178, 0x10c },
++	{ 0x90179, 0x0 },
++	{ 0x9017a, 0x478 },
++	{ 0x9017b, 0x109 },
++	{ 0x9017c, 0x0 },
++	{ 0x9017d, 0x1 },
++	{ 0x9017e, 0x8 },
++	{ 0x9017f, 0x8 },
++	{ 0x90180, 0x4 },
++	{ 0x90181, 0x0 },
++	{ 0x90006, 0x8 },
++	{ 0x90007, 0x7c8 },
++	{ 0x90008, 0x109 },
++	{ 0x90009, 0x0 },
++	{ 0x9000a, 0x400 },
++	{ 0x9000b, 0x106 },
++	{ 0xd00e7, 0x400 },
++	{ 0x90017, 0x0 },
++	{ 0x9001f, 0x29 },
++	{ 0x90026, 0x68 },
++	{ 0x400d0, 0x0 },
++	{ 0x400d1, 0x101 },
++	{ 0x400d2, 0x105 },
++	{ 0x400d3, 0x107 },
++	{ 0x400d4, 0x10f },
++	{ 0x400d5, 0x202 },
++	{ 0x400d6, 0x20a },
++	{ 0x400d7, 0x20b },
++	{ 0x2003a, 0x2 },
++	{ 0x200be, 0x3 },
++	{ 0x2000b, 0x465 },
++	{ 0x2000c, 0xfa },
++	{ 0x2000d, 0x9c4 },
++	{ 0x2000e, 0x2c },
++	{ 0x12000b, 0x70 },
++	{ 0x12000c, 0x19 },
++	{ 0x12000d, 0xfa },
++	{ 0x12000e, 0x10 },
++	{ 0x22000b, 0x1c },
++	{ 0x22000c, 0x6 },
++	{ 0x22000d, 0x3e },
++	{ 0x22000e, 0x10 },
++	{ 0x9000c, 0x0 },
++	{ 0x9000d, 0x173 },
++	{ 0x9000e, 0x60 },
++	{ 0x9000f, 0x6110 },
++	{ 0x90010, 0x2152 },
++	{ 0x90011, 0xdfbd },
++	{ 0x90012, 0x2060 },
++	{ 0x90013, 0x6152 },
++	{ 0x20010, 0x5a },
++	{ 0x20011, 0x3 },
++	{ 0x40080, 0xe0 },
++	{ 0x40081, 0x12 },
++	{ 0x40082, 0xe0 },
++	{ 0x40083, 0x12 },
++	{ 0x40084, 0xe0 },
++	{ 0x40085, 0x12 },
++	{ 0x140080, 0xe0 },
++	{ 0x140081, 0x12 },
++	{ 0x140082, 0xe0 },
++	{ 0x140083, 0x12 },
++	{ 0x140084, 0xe0 },
++	{ 0x140085, 0x12 },
++	{ 0x240080, 0xe0 },
++	{ 0x240081, 0x12 },
++	{ 0x240082, 0xe0 },
++	{ 0x240083, 0x12 },
++	{ 0x240084, 0xe0 },
++	{ 0x240085, 0x12 },
++	{ 0x400fd, 0xf },
++	{ 0x10011, 0x1 },
++	{ 0x10012, 0x1 },
++	{ 0x10013, 0x180 },
++	{ 0x10018, 0x1 },
++	{ 0x10002, 0x6209 },
++	{ 0x100b2, 0x1 },
++	{ 0x101b4, 0x1 },
++	{ 0x102b4, 0x1 },
++	{ 0x103b4, 0x1 },
++	{ 0x104b4, 0x1 },
++	{ 0x105b4, 0x1 },
++	{ 0x106b4, 0x1 },
++	{ 0x107b4, 0x1 },
++	{ 0x108b4, 0x1 },
++	{ 0x11011, 0x1 },
++	{ 0x11012, 0x1 },
++	{ 0x11013, 0x180 },
++	{ 0x11018, 0x1 },
++	{ 0x11002, 0x6209 },
++	{ 0x110b2, 0x1 },
++	{ 0x111b4, 0x1 },
++	{ 0x112b4, 0x1 },
++	{ 0x113b4, 0x1 },
++	{ 0x114b4, 0x1 },
++	{ 0x115b4, 0x1 },
++	{ 0x116b4, 0x1 },
++	{ 0x117b4, 0x1 },
++	{ 0x118b4, 0x1 },
++	{ 0x12011, 0x1 },
++	{ 0x12012, 0x1 },
++	{ 0x12013, 0x180 },
++	{ 0x12018, 0x1 },
++	{ 0x12002, 0x6209 },
++	{ 0x120b2, 0x1 },
++	{ 0x121b4, 0x1 },
++	{ 0x122b4, 0x1 },
++	{ 0x123b4, 0x1 },
++	{ 0x124b4, 0x1 },
++	{ 0x125b4, 0x1 },
++	{ 0x126b4, 0x1 },
++	{ 0x127b4, 0x1 },
++	{ 0x128b4, 0x1 },
++	{ 0x13011, 0x1 },
++	{ 0x13012, 0x1 },
++	{ 0x13013, 0x180 },
++	{ 0x13018, 0x1 },
++	{ 0x13002, 0x6209 },
++	{ 0x130b2, 0x1 },
++	{ 0x131b4, 0x1 },
++	{ 0x132b4, 0x1 },
++	{ 0x133b4, 0x1 },
++	{ 0x134b4, 0x1 },
++	{ 0x135b4, 0x1 },
++	{ 0x136b4, 0x1 },
++	{ 0x137b4, 0x1 },
++	{ 0x138b4, 0x1 },
++	{ 0x20089, 0x1 },
++	{ 0x20088, 0x19 },
++	{ 0xc0080, 0x2 },
++	{ 0xd0000, 0x1 },
++};
++
++static struct dram_fsp_msg ddr_dram_fsp_msg[] = {
++	{
++		/* P0 4000mts 1D */
++		.drate = 4000,
++		.fw_type = FW_1D_IMAGE,
++		.fsp_cfg = ddr_fsp0_cfg,
++		.fsp_cfg_num = ARRAY_SIZE(ddr_fsp0_cfg),
++	},
++	{
++		/* P1 400mts 1D */
++		.drate = 400,
++		.fw_type = FW_1D_IMAGE,
++		.fsp_cfg = ddr_fsp1_cfg,
++		.fsp_cfg_num = ARRAY_SIZE(ddr_fsp1_cfg),
++	},
++	{
++		/* P2 100mts 1D */
++		.drate = 100,
++		.fw_type = FW_1D_IMAGE,
++		.fsp_cfg = ddr_fsp2_cfg,
++		.fsp_cfg_num = ARRAY_SIZE(ddr_fsp2_cfg),
++	},
++	{
++		/* P0 4000mts 2D */
++		.drate = 4000,
++		.fw_type = FW_2D_IMAGE,
++		.fsp_cfg = ddr_fsp0_2d_cfg,
++		.fsp_cfg_num = ARRAY_SIZE(ddr_fsp0_2d_cfg),
++	},
++};
++
++/* ddr timing config params */
++struct dram_timing_info dram_timing = {
++	.ddrc_cfg = ddr_ddrc_cfg,
++	.ddrc_cfg_num = ARRAY_SIZE(ddr_ddrc_cfg),
++	.ddrphy_cfg = ddr_ddrphy_cfg,
++	.ddrphy_cfg_num = ARRAY_SIZE(ddr_ddrphy_cfg),
++	.fsp_msg = ddr_dram_fsp_msg,
++	.fsp_msg_num = ARRAY_SIZE(ddr_dram_fsp_msg),
++	.ddrphy_pie = ddr_phy_pie,
++	.ddrphy_pie_num = ARRAY_SIZE(ddr_phy_pie),
++	.fsp_table = { 4000, 400, 100, },
++};
+diff --git a/board/canyon/canyon_mx8mp/spl.c b/board/canyon/canyon_mx8mp/spl.c
+new file mode 100644
+index 00000000000..64f0079d4c6
+--- /dev/null
++++ b/board/canyon/canyon_mx8mp/spl.c
+@@ -0,0 +1,290 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Copyright 2018-2019, 2021 NXP
++ * Copyright 2020-2024 Variscite Ltd.
++ *
++ */
++
++#include <common.h>
++#include <cpu_func.h>
++#include <hang.h>
++#include <image.h>
++#include <init.h>
++#include <spl.h>
++#include <asm/io.h>
++#include <errno.h>
++#include <asm/io.h>
++#include <asm/global_data.h>
++#include <asm/arch/sys_proto.h>
++#include <asm/mach-imx/iomux-v3.h>
++#include <asm/arch/imx8mp_pins.h>
++#include <asm/mach-imx/boot_mode.h>
++#include <asm/mach-imx/boot_mode.h>
++#include <asm/mach-imx/gpio.h>
++#include <asm/mach-imx/mxc_i2c.h>
++#include <power/pmic.h>
++
++#include <power/pca9450.h>
++#include <asm/arch/clock.h>
++#include <dm/uclass.h>
++#include <dm/device.h>
++#include <dm/uclass-internal.h>
++#include <dm/device-internal.h>
++#include <asm/arch/ddr.h>
++#include <asm/sections.h>
++
++#include "../../variscite/common/imx8_eeprom.h"
++#include "canyon_mx8mp.h"
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#define UART_PAD_CTRL	(PAD_CTL_DSE6 | PAD_CTL_FSEL1)
++
++static iomux_v3_cfg_t const uart_pads_dart[] = {
++	MX8MP_PAD_UART1_RXD__UART1_DCE_RX | MUX_PAD_CTRL(UART_PAD_CTRL),
++	MX8MP_PAD_UART1_TXD__UART1_DCE_TX | MUX_PAD_CTRL(UART_PAD_CTRL),
++};
++
++static iomux_v3_cfg_t const uart_pads_som[] = {
++	MX8MP_PAD_UART2_RXD__UART2_DCE_RX | MUX_PAD_CTRL(UART_PAD_CTRL),
++	MX8MP_PAD_UART2_TXD__UART2_DCE_TX | MUX_PAD_CTRL(UART_PAD_CTRL),
++};
++
++extern struct mxc_uart *mxc_base;
++
++static struct var_eeprom eeprom = {0};
++
++int spl_board_boot_device(enum boot_device boot_dev_spl)
++{
++#ifdef CONFIG_SPL_BOOTROM_SUPPORT
++	return BOOT_DEVICE_BOOTROM;
++#else
++	switch (boot_dev_spl) {
++	case SD1_BOOT:
++	case MMC1_BOOT:
++	case SD2_BOOT:
++	case MMC2_BOOT:
++		return BOOT_DEVICE_MMC1;
++	case SD3_BOOT:
++	case MMC3_BOOT:
++		return BOOT_DEVICE_MMC2;
++	case QSPI_BOOT:
++		return BOOT_DEVICE_NOR;
++	case NAND_BOOT:
++		return BOOT_DEVICE_NAND;
++	case USB_BOOT:
++		return BOOT_DEVICE_BOARD;
++	default:
++		return BOOT_DEVICE_NONE;
++	}
++#endif
++}
++
++static void spl_dram_init(void)
++{
++	/* EEPROM initialization */
++	var_eeprom_read_header(&eeprom);
++	var_eeprom_adjust_dram(&eeprom, &dram_timing);
++	ddr_init(&dram_timing);
++}
++
++static void spl_uart_init(void)
++{
++	int board_id;
++
++	board_id = var_detect_board_id();
++	if (board_id == BOARD_ID_DART) {
++		imx_iomux_v3_setup_multiple_pads(uart_pads_dart,
++			ARRAY_SIZE(uart_pads_dart));
++		init_uart_clk(0);
++	} else if (board_id == BOARD_ID_SOM) {
++		imx_iomux_v3_setup_multiple_pads(uart_pads_som,
++			ARRAY_SIZE(uart_pads_som));
++		init_uart_clk(1);
++		mxc_base = (struct mxc_uart *)UART2_BASE_ADDR;
++	}
++}
++
++#if CONFIG_IS_ENABLED(POWER_LEGACY)
++#define PMIC_I2C_BUS	0
++int power_init_board(void)
++{
++	struct pmic *p;
++	int ret;
++
++	ret = power_pca9450_init(PMIC_I2C_BUS, 0x25);
++	if (ret)
++		printf("power init failed");
++	p = pmic_get("PCA9450");
++	pmic_probe(p);
++
++	/* BUCKxOUT_DVS0/1 control BUCK123 output */
++	pmic_reg_write(p, PCA9450_BUCK123_DVS, 0x29);
++
++	/*
++	 * increase VDD_SOC to typical value 0.95V before first
++	 * DRAM access, set DVS1 to 0.85v for suspend.
++	 * Enable DVS control through PMIC_STBY_REQ and
++	 * set B1_ENMODE=1 (ON by PMIC_ON_REQ=H)
++	 */
++	pmic_reg_write(p, PCA9450_BUCK1OUT_DVS0, 0x1C);
++	pmic_reg_write(p, PCA9450_BUCK1OUT_DVS1, 0x14);
++	pmic_reg_write(p, PCA9450_BUCK1CTRL, 0x59);
++
++	/* Kernel uses OD/OD freq for SOC */
++	/* To avoid timing risk from SOC to ARM,increase VDD_ARM to OD voltage 0.95v */
++	pmic_reg_write(p, PCA9450_BUCK2OUT_DVS0, 0x1C);
++
++	/* set WDOG_B_CFG to cold reset */
++	pmic_reg_write(p, PCA9450_RESET_CTRL, 0xA1);
++
++	/* Set LDO4 voltage to 1.8V */
++	pmic_reg_write(p, PCA9450_LDO4CTRL, 0xCA);
++
++	/* Enable I2C level translator */
++	pmic_reg_write(p, PCA9450_CONFIG2, 0x03);
++
++	/* Set BUCK5 voltage to 1.85V to fix Ethernet PHY reset */
++	if (var_detect_board_id() == BOARD_ID_DART)
++		pmic_reg_write(p, PCA9450_BUCK5OUT, 0x32);
++
++	return 0;
++}
++#endif
++
++void spl_board_init(void)
++{
++	struct var_eeprom *ep = VAR_EEPROM_DATA;
++
++	arch_misc_init();
++
++	/* Set GIC clock to 500Mhz for OD VDD_SOC. Kernel driver does not allow to change it.
++	 * Should set the clock after PMIC setting done.
++	 * Default is 400Mhz (system_pll1_800m with div = 2) set by ROM for ND VDD_SOC
++	 */
++	clock_enable(CCGR_GIC, 0);
++	clock_set_target_val(GIC_CLK_ROOT, CLK_ROOT_ON | CLK_ROOT_SOURCE_SEL(5));
++	clock_enable(CCGR_GIC, 1);
++
++	puts("Normal Boot\n");
++
++	/* Copy EEPROM contents to DRAM */
++	memcpy(ep, &eeprom, sizeof(*ep));
++}
++
++#ifdef CONFIG_SPL_LOAD_FIT
++int board_fit_config_name_match(const char *name)
++{
++	int board_id = var_detect_board_id();
++
++	if ((board_id == BOARD_ID_DART) && !strcmp(name, "imx8mp-var-dart-dt8mcustomboard")) {
++		return 0;
++	} else if ((board_id == BOARD_ID_SOM) && !strcmp(name, "imx8mp-var-som-symphony")) {
++		return 0;
++	}
++
++	return -1;
++}
++#endif
++
++#ifdef CONFIG_POWER
++#define I2C_PAD_CTRL (PAD_CTL_DSE6 | PAD_CTL_HYS | PAD_CTL_PUE | PAD_CTL_PE)
++
++struct i2c_pads_info i2c_pads_dart = {
++	.scl = {
++		.i2c_mode = MX8MP_PAD_I2C1_SCL__I2C1_SCL | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_I2C1_SCL__GPIO5_IO14 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(5, 14),
++	},
++	.sda = {
++		.i2c_mode = MX8MP_PAD_I2C1_SDA__I2C1_SDA | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_I2C1_SDA__GPIO5_IO15 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(5, 15),
++	},
++};
++
++struct i2c_pads_info i2c1_pads_dart = {
++	.scl = {
++		.i2c_mode = MX8MP_PAD_I2C2_SCL__I2C2_SCL | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_I2C2_SCL__GPIO5_IO16 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(5, 16),
++	},
++	.sda = {
++		.i2c_mode = MX8MP_PAD_I2C2_SDA__I2C2_SDA | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_I2C2_SDA__GPIO5_IO17 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(5, 17),
++	},
++};
++
++struct i2c_pads_info i2c_pads_som = {
++	.scl = {
++		.i2c_mode = MX8MP_PAD_SD1_DATA4__I2C1_SCL | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_SD1_DATA4__GPIO2_IO06 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(2, 6),
++	},
++	.sda = {
++		.i2c_mode = MX8MP_PAD_SD1_DATA5__I2C1_SDA | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gpio_mode = MX8MP_PAD_SD1_DATA5__GPIO2_IO07 | MUX_PAD_CTRL(I2C_PAD_CTRL),
++		.gp = IMX_GPIO_NR(2, 7),
++	},
++};
++#endif
++
++void board_init_f(ulong dummy)
++{
++	int ret;
++	struct udevice *dev;
++
++	/* Clear the BSS. */
++	memset(__bss_start, 0, __bss_end - __bss_start);
++
++	arch_cpu_init();
++
++	timer_init();
++
++	ret = spl_early_init();
++	if (ret)
++		hang();
++
++	/* UART can be initialized only after DM setup in spl_early_init().
++	 * SOM and DART have different debug UARTs, board detection code
++	 * uses GPIO, which can be accessed only after DM is initialized.
++	 */
++	spl_uart_init();
++
++	board_early_init_f();
++
++	/* Can run only after UART clock is enabled */
++	preloader_console_init();
++
++	ret = uclass_get_device_by_name(UCLASS_CLK,
++					"clock-controller@30380000",
++					&dev);
++	if (ret < 0) {
++		printf("Failed to find clock node. Check device tree\n");
++		hang();
++	}
++
++	enable_tzc380();
++
++#ifdef CONFIG_POWER
++	/* I2C Bus 0 initialization */
++	if (var_detect_board_id() == BOARD_ID_DART)
++		setup_i2c(0, CONFIG_SYS_I2C_SPEED, 0x7f, &i2c_pads_dart);
++	else
++		setup_i2c(0, CONFIG_SYS_I2C_SPEED, 0x7f, &i2c_pads_som);
++#endif
++
++	if (var_detect_board_id() == BOARD_ID_DART) {
++		/* I2C Bus 1 initialization */
++		setup_i2c(1, CONFIG_SYS_I2C_SPEED, 0x7f, &i2c1_pads_dart);
++	}
++
++	/* PMIC initialization */
++	power_init_board();
++
++	/* DDR initialization */
++	spl_dram_init();
++
++	board_init_r(NULL, 0);
++}
+diff --git a/configs/canyon_mx8mp_defconfig b/configs/canyon_mx8mp_defconfig
+new file mode 100644
+index 00000000000..2a1aa504a18
+--- /dev/null
++++ b/configs/canyon_mx8mp_defconfig
+@@ -0,0 +1,184 @@
++CONFIG_ARM=y
++CONFIG_ARCH_IMX8M=y
++CONFIG_TEXT_BASE=0x40200000
++CONFIG_SYS_MALLOC_LEN=0x2000000
++CONFIG_SPL_GPIO=y
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
++CONFIG_NR_DRAM_BANKS=3
++CONFIG_ENV_SIZE=0x4000
++CONFIG_ENV_OFFSET=0x700000
++CONFIG_SYS_I2C_MXC_I2C1=y
++CONFIG_SYS_I2C_MXC_I2C2=y
++CONFIG_SYS_I2C_MXC_I2C3=y
++CONFIG_SYS_I2C_MXC_I2C4=y
++CONFIG_DM_GPIO=y
++CONFIG_DEFAULT_DEVICE_TREE="canyon-mx8mp"
++CONFIG_SPL_TEXT_BASE=0x920000
++CONFIG_TARGET_IMX8MP_VAR_DART=y
++CONFIG_OF_LIBFDT_OVERLAY=y
++CONFIG_SYS_MONITOR_LEN=524288
++CONFIG_SPL_SERIAL=y
++CONFIG_SPL_DRIVERS_MISC=y
++CONFIG_SPL_STACK=0x96dff0
++CONFIG_SPL=y
++CONFIG_IMX_BOOTAUX=y
++CONFIG_SPL_IMX_ROMAPI_LOADADDR=0x48000000
++CONFIG_SYS_LOAD_ADDR=0x40480000
++CONFIG_EXTCON_PTN5150=y
++CONFIG_OF_BOARD_FIXUP=y
++CONFIG_SYS_MEMTEST_START=0x60000000
++CONFIG_SYS_MEMTEST_END=0xA0000000
++CONFIG_REMAKE_ELF=y
++CONFIG_FIT=y
++CONFIG_FIT_EXTERNAL_OFFSET=0x3000
++CONFIG_FIT_SIGNATURE=y
++CONFIG_SPL_LOAD_FIT=y
++CONFIG_LEGACY_IMAGE_FORMAT=y
++CONFIG_SYS_BOOTM_LEN=0x2000000
++CONFIG_DISTRO_DEFAULTS=y
++CONFIG_BOOTDELAY=1
++CONFIG_OF_BOARD_SETUP=y
++CONFIG_OF_SYSTEM_SETUP=y
++CONFIG_BOOTCOMMAND="run bsp_bootcmd"
++CONFIG_DEFAULT_FDT_FILE="canyon-mx8mp.dtb"
++CONFIG_SYS_CBSIZE=2048
++CONFIG_SYS_PBSIZE=2074
++CONFIG_BOARD_EARLY_INIT_F=y
++CONFIG_BOARD_LATE_INIT=y
++CONFIG_SPL_MAX_SIZE=0x2C000
++CONFIG_SPL_HAS_BSS_LINKER_SECTION=y
++CONFIG_SPL_BSS_START_ADDR=0x96e000
++CONFIG_SPL_BSS_MAX_SIZE=0x2000
++CONFIG_SPL_BOARD_INIT=y
++CONFIG_SPL_BOOTROM_SUPPORT=y
++# CONFIG_SPL_SHARES_INIT_SP_ADDR is not set
++CONFIG_SPL_SYS_MALLOC=y
++CONFIG_SPL_HAS_CUSTOM_MALLOC_START=y
++CONFIG_SPL_CUSTOM_SYS_MALLOC_ADDR=0x42200000
++CONFIG_SPL_SYS_MALLOC_SIZE=0x80000
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_USE_SECTOR=y
++CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR=0x300
++CONFIG_SPL_I2C=y
++CONFIG_SPL_POWER=y
++CONFIG_SPL_WATCHDOG=y
++CONFIG_SYS_PROMPT="u-boot=> "
++# CONFIG_BOOTM_NETBSD is not set
++# CONFIG_CMD_EXPORTENV is not set
++CONFIG_CMD_ERASEENV=y
++CONFIG_CMD_NVEDIT_EFI=y
++CONFIG_CRC32_VERIFY=y
++CONFIG_CMD_MEMTEST=y
++CONFIG_CMD_CLK=y
++CONFIG_CMD_DFU=y
++CONFIG_CMD_FUSE=y
++CONFIG_CMD_GPIO=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_POWEROFF=y
++CONFIG_CMD_USB=y
++CONFIG_CMD_USB_SDP=y
++CONFIG_CMD_USB_MASS_STORAGE=y
++CONFIG_BOOTP_PREFER_SERVERIP=y
++CONFIG_CMD_SNTP=y
++CONFIG_CMD_CACHE=y
++CONFIG_CMD_EFIDEBUG=y
++CONFIG_CMD_RTC=y
++CONFIG_CMD_TIME=y
++CONFIG_CMD_GETTIME=y
++CONFIG_CMD_TIMER=y
++CONFIG_CMD_REGULATOR=y
++CONFIG_CMD_EXT4_WRITE=y
++CONFIG_OF_CONTROL=y
++CONFIG_SPL_OF_CONTROL=y
++CONFIG_ENV_OVERWRITE=y
++CONFIG_ENV_IS_NOWHERE=y
++CONFIG_ENV_IS_IN_MMC=y
++CONFIG_SYS_RELOC_GD_ENV_ADDR=y
++CONFIG_SYS_MMC_ENV_DEV=1
++CONFIG_USE_ETHPRIME=y
++CONFIG_ETHPRIME="eth0"
++CONFIG_NET_RANDOM_ETHADDR=y
++CONFIG_SPL_DM=y
++CONFIG_REGMAP=y
++CONFIG_SYSCON=y
++CONFIG_SPL_CLK_COMPOSITE_CCF=y
++CONFIG_CLK_COMPOSITE_CCF=y
++CONFIG_SPL_CLK_IMX8MP=y
++CONFIG_CLK_IMX8MP=y
++CONFIG_DFU_TFTP=y
++CONFIG_DFU_MMC=y
++CONFIG_DFU_RAM=y
++CONFIG_USB_FUNCTION_FASTBOOT=y
++CONFIG_UDP_FUNCTION_FASTBOOT=y
++CONFIG_FASTBOOT_BUF_ADDR=0x42800000
++CONFIG_FASTBOOT_BUF_SIZE=0x40000000
++CONFIG_FASTBOOT_FLASH=y
++CONFIG_GPIO_HOG=y
++CONFIG_MXC_GPIO=y
++CONFIG_DM_PCA953X=y
++CONFIG_DM_I2C=y
++# CONFIG_SPL_DM_I2C is not set
++CONFIG_SPL_SYS_I2C_LEGACY=y
++CONFIG_LED=y
++CONFIG_LED_GPIO=y
++CONFIG_SUPPORT_EMMC_RPMB=y
++CONFIG_SUPPORT_EMMC_BOOT=y
++CONFIG_MMC_IO_VOLTAGE=y
++CONFIG_MMC_UHS_SUPPORT=y
++CONFIG_MMC_HS400_ES_SUPPORT=y
++CONFIG_MMC_HS400_SUPPORT=y
++CONFIG_FSL_USDHC=y
++CONFIG_MTD=y
++CONFIG_PHY_ADIN=y
++CONFIG_PHY_ATHEROS=y
++CONFIG_PHY_MXL8611X=y
++CONFIG_DM_ETH_PHY=y
++CONFIG_PHY_GIGE=y
++CONFIG_DWC_ETH_QOS=y
++CONFIG_DWC_ETH_QOS_IMX=y
++CONFIG_FEC_MXC=y
++CONFIG_MII=y
++CONFIG_PHY=y
++CONFIG_PHY_IMX8MQ_USB=y
++CONFIG_PINCTRL=y
++CONFIG_SPL_PINCTRL=y
++CONFIG_PINCTRL_IMX8M=y
++CONFIG_SPL_POWER_LEGACY=y
++CONFIG_POWER_DOMAIN=y
++CONFIG_IMX8M_POWER_DOMAIN=y
++CONFIG_IMX8M_BLK_CTRL=y
++CONFIG_IMX8MP_HSIOMIX_BLKCTRL=y
++CONFIG_POWER_PCA9450=y
++CONFIG_DM_REGULATOR=y
++CONFIG_DM_REGULATOR_FIXED=y
++CONFIG_DM_REGULATOR_GPIO=y
++CONFIG_SPL_POWER_I2C=y
++CONFIG_DM_RTC=y
++CONFIG_RTC_EMULATION=y
++CONFIG_DM_SERIAL=y
++# CONFIG_SPL_DM_SERIAL is not set
++CONFIG_MXC_UART=y
++CONFIG_SYSRESET=y
++CONFIG_SYSRESET_PSCI=y
++CONFIG_TEE=y
++CONFIG_OPTEE=y
++CONFIG_DM_THERMAL=y
++CONFIG_IMX_TMU=y
++CONFIG_USB=y
++CONFIG_USB_XHCI_HCD=y
++CONFIG_USB_XHCI_DWC3=y
++CONFIG_USB_DWC3=y
++CONFIG_USB_GADGET=y
++CONFIG_USB_GADGET_MANUFACTURER="CANYON"
++CONFIG_USB_GADGET_VENDOR_NUM=0x1fc9
++CONFIG_USB_GADGET_PRODUCT_NUM=0x0152
++CONFIG_SPL_RSA=y
++CONFIG_SHA384=y
++CONFIG_LZO=y
++CONFIG_BZIP2=y
++CONFIG_EFI_SET_TIME=y
++CONFIG_EFI_RUNTIME_UPDATE_CAPSULE=y
++CONFIG_EFI_CAPSULE_ON_DISK=y
++CONFIG_EFI_CAPSULE_FIRMWARE_RAW=y
++# CONFIG_OPTEE_LIB is not set
+diff --git a/include/configs/canyon_mx8mp.h b/include/configs/canyon_mx8mp.h
+new file mode 100644
+index 00000000000..fa8785ed082
+--- /dev/null
++++ b/include/configs/canyon_mx8mp.h
+@@ -0,0 +1,226 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++/*
++ * Copyright 2019 NXP
++ * Copyright 2020-2024 Variscite Ltd.
++ */
++
++#ifndef __CANYON_MX8MP_H
++#define __CANYON_MX8MP_H
++
++#include <linux/sizes.h>
++#include <linux/stringify.h>
++#include <asm/arch/imx-regs.h>
++
++#include "imx_env.h"
++
++#define CFG_SYS_UBOOT_BASE				(QSPI0_AMBA_BASE + CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR * 512)
++
++#define CONFIG_SYS_I2C_SPEED		100000
++
++#define CONFIG_SERIAL_TAG
++#define CONFIG_FASTBOOT_USB_DEV		0
++
++/* ENET Config */
++#if defined(CONFIG_CMD_NET)
++#define PHY_ANEG_TIMEOUT		20000
++#endif
++
++#ifdef CONFIG_DISTRO_DEFAULTS
++#define BOOT_TARGET_DEVICES(func) \
++		func(USB, usb, 0) \
++		func(MMC, mmc, 1) \
++		func(MMC, mmc, 2)
++
++#include <config_distro_bootcmd.h>
++/* redefine BOOTENV_EFI_SET_FDTFILE_FALLBACK to use Variscite function to load fdt */
++#undef BOOTENV_EFI_SET_FDTFILE_FALLBACK
++#define BOOTENV_EFI_SET_FDTFILE_FALLBACK \
++	"setenv efi_dtb_prefixes; " \
++	"run loadfdt; "
++#else
++#define BOOTENV
++#endif
++
++#define CFG_MFG_ENV_SETTINGS \
++	CFG_MFG_ENV_SETTINGS_DEFAULT \
++	"initrd_addr=0x43800000\0" \
++	"initrd_high=0xffffffffffffffff\0" \
++	"emmc_dev=2\0"\
++	"sd_dev=1\0" \
++
++/* Initial environment variables */
++#define CFG_EXTRA_ENV_SETTINGS		\
++	CFG_MFG_ENV_SETTINGS \
++	"bootdir=/boot\0"	\
++	BOOTENV \
++	"prepare_mcore=setenv mcore_clk clk-imx8mp.mcore_booted;\0" \
++	"scriptaddr=0x43500000\0" \
++	"kernel_addr_r=" __stringify(CONFIG_SYS_LOAD_ADDR) "\0" \
++	"bsp_script=boot.scr\0" \
++	"image=Image.gz\0" \
++	"img_addr=0x42000000\0" \
++	"splashimage=0x4F600000\0" \
++	"console=ttymxc0,115200\0" \
++	"fdt_addr_r=0x43000000\0" \
++	"fdt_addr=0x43000000\0"			\
++	"fdt_high=0xffffffffffffffff\0"		\
++	"boot_fdt=try\0" \
++	"boot_fit=no\0" \
++	"fdt_file=undefined\0" \
++	"bootm_size=0x10000000\0" \
++	"ip_dyn=yes\0" \
++	"mmcdev="__stringify(CONFIG_SYS_MMC_ENV_DEV)"\0" \
++	"mmcblk=1\0" \
++	"mmcpart=1\0" \
++	"mmcautodetect=yes\0" \
++	"m7_addr=0x7e0000\0" \
++	"m7_bin=hello_world.bin\0" \
++	"use_m7=no\0" \
++	"dfu_alt_info=mmc 2=1 raw 0x40 0x1000 mmcpart\0" \
++	"loadm7bin=" \
++				"load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bootdir}/${m7_bin} && " \
++				"cp.b ${loadaddr} ${m7_addr} ${filesize}; " \
++				"echo Init rsc_table region memory; " \
++				"mw.b 400ff000 0 10\0" \
++	"runm7bin=" \
++		"if test ${m7_addr} = 0x7e0000; then " \
++			"echo Booting M7 from TCM; " \
++		"else " \
++			"echo Booting M7 from DRAM; " \
++			"dcache flush; " \
++		"fi; " \
++		"bootaux ${m7_addr};\0" \
++	"optargs=setenv bootargs ${bootargs} ${kernelargs};\0" \
++	"mmcargs=setenv bootargs ${mcore_clk} console=${console} " \
++		"root=/dev/mmcblk${mmcblk}p${mmcpart} rootwait rw ${cma_size} cma_name=linux,cma\0 " \
++	"bootenv=uEnv.txt\0" \
++	"loadbootscript=load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bootdir}/${bsp_script};\0" \
++	"bootscript=echo Running bootscript from mmc ...; " \
++		"source\0" \
++	"loadbootenv=load mmc ${mmcdev}:${mmcpart} ${loadaddr} ${bootdir}/${bootenv}\0" \
++	"importbootenv=echo Importing environment from mmc ...; " \
++		"env import -t -r $loadaddr $filesize\0" \
++	"loadimage=load mmc ${mmcdev}:${mmcpart} ${img_addr} ${bootdir}/${image};" \
++		"unzip ${img_addr} ${loadaddr}\0" \
++	"findfdt=" \
++		"if test $fdt_file = undefined; then " \
++			"if test $board_name = VAR-SOM-MX8M-PLUS; then " \
++				"if test ${som_rev} -lt 2; then " \
++					"setenv fdt_file imx8mp-var-som-1.x-symphony.dtb; " \
++				"elif test ${som_has_wbe} = 1; then " \
++					"setenv fdt_file imx8mp-var-som-wbe-symphony.dtb; " \
++				"else " \
++					"setenv fdt_file imx8mp-var-som-symphony.dtb; " \
++				"fi; " \
++			"else " \
++				"if test ${som_rev} -lt 2; then " \
++					"setenv fdt_file imx8mp-var-dart-1.x-dt8mcustomboard.dtb; " \
++				"elif test ${som_has_wbe} = 1; then " \
++					"setenv fdt_file imx8mp-var-dart-wbe-dt8mcustomboard.dtb; " \
++				"else " \
++					"setenv fdt_file imx8mp-var-dart-dt8mcustomboard.dtb;" \
++				"fi; " \
++			"fi; " \
++		"fi; \0" \
++	"loadfdt=run findfdt; " \
++		"echo fdt_file=${fdt_file}; " \
++		"load mmc ${mmcdev}:${mmcpart} ${fdt_addr} ${bootdir}/${fdt_file}\0" \
++	"ramsize_check="\
++		"if test $sdram_size -le 512; then " \
++			"setenv cma_size cma=320M; " \
++		"elif test $sdram_size -le 1024; then " \
++			"setenv cma_size cma=576M; " \
++		"elif test $sdram_size -le 2048; then " \
++			"setenv cma_size cma=640M; " \
++		"else " \
++			"setenv cma_size cma=960M; " \
++		"fi\0" \
++	"mmcboot=echo Booting from mmc ...; " \
++		"run mmcargs; " \
++		"run optargs; " \
++		"if test ${boot_fit} = yes || test ${boot_fit} = try; then " \
++			"bootm ${loadaddr}; " \
++		"else " \
++			"if run loadfdt; then " \
++				"booti ${loadaddr} - ${fdt_addr_r}; " \
++			"else " \
++				"echo WARN: Cannot load the DT; " \
++			"fi; " \
++		"fi;\0" \
++	"netargs=setenv bootargs ${mcore_clk} console=${console} " \
++		"root=/dev/nfs ${cma_size} cma_name=linux,cma " \
++		"ip=dhcp nfsroot=${serverip}:${nfsroot},v3,tcp\0" \
++	"netboot=echo Booting from net ...; " \
++		"run netargs;  " \
++		"run optargs;  " \
++		"if test ${ip_dyn} = yes; then " \
++			"setenv get_cmd dhcp; " \
++		"else " \
++			"setenv get_cmd tftp; " \
++		"fi; " \
++		"${get_cmd} ${img_addr} ${image}; unzip ${img_addr} ${loadaddr}; " \
++		"if test ${boot_fit} = yes || test ${boot_fit} = try; then " \
++			"bootm ${loadaddr}; " \
++		"else " \
++			"run findfdt; " \
++			"echo fdt_file=${fdt_file}; " \
++			"if ${get_cmd} ${fdt_addr} ${fdt_file}; then " \
++				"booti ${loadaddr} - ${fdt_addr_r}; " \
++			"else " \
++				"echo WARN: Cannot load the DT; " \
++			"fi; " \
++		"fi;\0" \
++	"bsp_bootcmd=echo Running BSP bootcmd ...; " \
++		"run ramsize_check; " \
++		"mmc dev ${mmcdev}; " \
++		"if mmc rescan; then " \
++			"if test ${use_m7} = yes && run loadm7bin; then " \
++				"run runm7bin; " \
++			"fi; " \
++			"if run loadbootscript; then " \
++				"run bootscript; " \
++			"else " \
++				"if run loadbootenv; then " \
++					"echo Loaded environment from ${bootenv}; " \
++					"run importbootenv; " \
++				"fi;" \
++				"if run loadimage; then " \
++					"run mmcboot; " \
++				"else " \
++					"run netboot; " \
++				"fi; " \
++			"fi; " \
++		"fi;"
++
++/* Link Definitions */
++
++#define CFG_SYS_INIT_RAM_ADDR		0x40000000
++#define CFG_SYS_INIT_RAM_SIZE		0x80000
++
++/* DDR configs */
++#define CFG_SYS_SDRAM_BASE		0x40000000
++#define PHYS_SDRAM			0x40000000
++#define DEFAULT_SDRAM_SIZE		(512 * SZ_1M)
++
++#define CFG_MXC_UART_BASE		UART1_BASE_ADDR
++
++#define CFG_SYS_FSL_USDHC_NUM	2
++#define CFG_SYS_FSL_ESDHC_ADDR	0
++
++/* USB configs */
++
++#define CONFIG_USB_MAX_CONTROLLER_COUNT		2
++#define CONFIG_USBD_HS
++#define CONFIG_USB_GADGET_VBUS_DRAW		2
++
++/* EEPROM configs */
++#define VAR_EEPROM_DRAM_START	(PHYS_SDRAM + (DEFAULT_SDRAM_SIZE >> 1))
++
++/* Define the offset for the FDT FIT hash */
++#define CFG_FIT_FDT_HASH_OFFSET 0x12000
++
++#if defined(CONFIG_ANDROID_SUPPORT)
++#include "imx8mp_var_dart_android.h"
++#endif
++
++#endif
