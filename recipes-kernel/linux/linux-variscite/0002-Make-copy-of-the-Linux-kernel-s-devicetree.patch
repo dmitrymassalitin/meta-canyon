@@ -23,7 +23,7 @@ index 000000000000..1c3c389a3d6c
 +#include "imx8mp-var-som.dtsi"
 +
 +/ {
-+	model = "Variscite VAR-SOM-MX8M-PLUS on Symphony-Board";
++	model = "Variscite VAR-SOM-MX8M-PLUS on Symphony-Board (Canyon Test)";
 +
 +	chosen {
 +		stdout-path = &uart2;
