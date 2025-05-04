@@ -70,7 +70,7 @@ index 00000000000..668004cbddb
 +#include "imx8mp-var-som.dtsi"
 +
 +/ {
-+	model = "Variscite VAR-SOM-MX8M-PLUS on Symphony-Board";
++	model = "Variscite VAR-SOM-MX8M-PLUS on Symphony-Board (Canyon Test)";
 +
 +	chosen {
 +		stdout-path = &uart2;
@@ -396,7 +396,7 @@ index 00000000000..f67681ff3c0
 +# SPDX-License-Identifier:      GPL-2.0+
 +#
 +
-+obj-y += imx8mp_var_dart.o ../../variscite/common/imx8_eeprom.o
++obj-y += canyon_mx8mp.o ../../variscite/common/imx8_eeprom.o
 +
 +ifdef CONFIG_SPL_BUILD
 +obj-y += spl.o
@@ -2395,7 +2395,7 @@ index 00000000000..2a1aa504a18
 +CONFIG_DM_GPIO=y
 +CONFIG_DEFAULT_DEVICE_TREE="canyon-mx8mp"
 +CONFIG_SPL_TEXT_BASE=0x920000
-+CONFIG_TARGET_IMX8MP_VAR_DART=y
++CONFIG_TARGET_CANYON_MX8MP=y
 +CONFIG_OF_LIBFDT_OVERLAY=y
 +CONFIG_SYS_MONITOR_LEN=524288
 +CONFIG_SPL_SERIAL=y
@@ -2636,7 +2636,7 @@ index 00000000000..fa8785ed082
 +	"fdt_high=0xffffffffffffffff\0"		\
 +	"boot_fdt=try\0" \
 +	"boot_fit=no\0" \
-+	"fdt_file=undefined\0" \
++	"fdt_file=canyon-mx8mp.dtb\0" \
 +	"bootm_size=0x10000000\0" \
 +	"ip_dyn=yes\0" \
 +	"mmcdev="__stringify(CONFIG_SYS_MMC_ENV_DEV)"\0" \
